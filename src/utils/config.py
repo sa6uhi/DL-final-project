@@ -2,8 +2,9 @@
 
 All hyperparameters, paths, seeds, and thresholds must be sourced from the
 single configuration file ``config/config.yaml`` through this module.
-Relative paths declared inside the YAML file are resolved against the YAML
-file's directory, so configurations remain portable between machines.
+Relative paths declared inside the YAML file are resolved against the
+repository root (the directory containing the ``config/`` folder), so
+configurations remain portable between machines.
 """
 
 from __future__ import annotations
@@ -16,6 +17,23 @@ import yaml
 
 DEFAULT_CONFIG_PATH = Path("config/config.yaml")
 _MISSING = object()
+
+
+def _resolve_base_dir(config_path: Path) -> Path:
+    """Determine the directory absolute paths are resolved against.
+
+    Paths are resolved relative to the repository root, i.e. the directory
+    containing the ``config/`` folder. If the configuration file lives
+    outside a ``config`` directory, its own directory is used instead.
+
+    Args:
+        config_path: Absolute path of the loaded configuration file.
+
+    Returns:
+        Directory used as the anchor for relative paths.
+    """
+    parent = config_path.parent
+    return parent.parent if parent.name == "config" else parent
 
 
 class Config(dict):
@@ -202,4 +220,4 @@ def load_config(path: str | Path | None = None) -> Config:
         raw = yaml.safe_load(fh) or {}
     if not isinstance(raw, dict):
         raise yaml.YAMLError(f"Configuration root must be a mapping, got {type(raw)}")
-    return Config(raw, base_dir=config_path.parent)
+    return Config(raw, base_dir=_resolve_base_dir(config_path))

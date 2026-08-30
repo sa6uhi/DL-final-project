@@ -81,6 +81,17 @@ def test_get_path_absolute_is_kept(sample_yaml: str) -> None:
     assert cfg.get_path("paths.absolute").is_absolute()
 
 
+def test_get_path_from_config_dir_resolves_repo_root(tmp_path) -> None:
+    """A config inside a ``config`` dir resolves paths against the repo root."""
+    repo_root = tmp_path / "project"
+    config_dir = repo_root / "config"
+    config_dir.mkdir(parents=True)
+    config_file = config_dir / "config.yaml"
+    config_file.write_text("paths:\n  data: data/processed\n", encoding="utf-8")
+    cfg = load_config(config_file)
+    assert cfg.get_path("paths.data") == (repo_root / "data/processed").resolve()
+
+
 def test_get_path_non_string_raises(sample_yaml: str) -> None:
     """get_path raises TypeError when the stored value is not a string."""
     cfg = load_config(sample_yaml)
