@@ -1,0 +1,122 @@
+"""Pydantic request/response schemas for the serving microservice.
+
+All API payloads are strictly validated: lengths, bounds, and enum values
+are checked at the request boundary so downstream modules never see
+malformed data.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+Decision = Literal["auto_approve", "auto_block", "escalate"]
+
+N_FEATURES_MIN = 8
+N_FEATURES_MAX = 2500
+MAX_BATCH_SIZE = 256
+
+
+class PredictionRequest(BaseModel):
+    """A single transaction feature vector to score.
+
+    Attributes:
+        features: Raw numeric feature vector of a transaction. Exact
+            dimensionality is validated at the model level at runtime.
+        transaction_id: Optional external transaction identifier.
+        card_id: Optional masked cardholder identifier for triage context.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    features: list[float] = Field(..., min_length=N_FEATURES_MIN, max_length=N_FEATURES_MAX)
+    transaction_id: Optional[str] = Field(default=None, max_length=64)
+    card_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class StreamRequest(BaseModel):
+    """A batch of transactions submitted through the streaming endpoint.
+
+    Attributes:
+        transactions: Payload list, capped at ``MAX_BATCH_SIZE`` entries.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    transactions: list[PredictionRequest] = Field(..., min_length=1, max_length=MAX_BATCH_SIZE)
+
+
+class PredictionResponse(BaseModel):
+    """Scoring result for a single transaction.
+
+    Attributes:
+        transaction_id: Echoed transaction identifier (if provided).
+        is_fraud: Discrete fraud prediction flag.
+        fraud_probability: Fraud likelihood in ``[0, 1]``.
+        anomaly_score: Raw DAE reconstruction residual score.
+        decision: Triage policy decision.
+        latency_ms: End-to-end request latency in milliseconds.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    transaction_id: Optional[str] = None
+    is_fraud: bool
+    fraud_probability: float = Field(..., ge=0.0, le=1.0)
+    anomaly_score: float = Field(..., ge=0.0)
+    decision: Decision
+    latency_ms: float = Field(..., ge=0.0)
+
+
+class StreamResponse(BaseModel):
+    """Scoring results for a batch of transactions.
+
+    Attributes:
+        results: Per-transaction predictions in request order.
+        count: Number of scored transactions.
+        total_latency_ms: Cumulative batch processing time.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    results: list[PredictionResponse]
+    count: int = Field(..., ge=1)
+    total_latency_ms: float = Field(..., ge=0.0)
+
+
+class HealthResponse(BaseModel):
+    """Service health summary.
+
+    Attributes:
+        status: ``"ok"`` when the service can score transactions.
+        version: Package version of the running service.
+        model_loaded: Whether a real checkpoint (vs reference model) is up.
+        uptime_s: Seconds since the process started.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    status: Literal["ok", "degraded"]
+    version: str
+    model_loaded: bool
+    uptime_s: float = Field(..., ge=0.0)
+
+
+class MetricsResponse(BaseModel):
+    """In-flight self-monitoring counters.
+
+    Attributes:
+        requests_total: Number of transactions served since startup.
+        errors_total: Number of failed requests.
+        avg_latency_ms: Mean latency across served transactions.
+        p99_latency_ms: 99th percentile latency across served transactions.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    requests_total: int = Field(..., ge=0)
+    errors_total: int = Field(..., ge=0)
+    avg_latency_ms: float = Field(..., ge=0.0)
+    p99_latency_ms: float = Field(..., ge=0.0)
