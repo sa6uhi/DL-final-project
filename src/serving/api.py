@@ -278,7 +278,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         return StreamResponse(results=results, count=len(results), total_latency_ms=latency_ms)
 
     @app.get("/health", response_model=HealthResponse)
-    def health() -> HealthResponse:
+    async def health() -> HealthResponse:
         """Liveness and readiness summary."""
         return HealthResponse(
             status="ok" if app.state.scorer is not None else "degraded",
@@ -288,7 +288,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         )
 
     @app.get("/metrics", response_model=MetricsResponse)
-    def metrics() -> MetricsResponse:
+    async def metrics() -> MetricsResponse:
         """Self-monitoring counters: volume, errors, latency percentiles."""
         latencies = sorted(app.state.latencies)
         avg = sum(latencies) / len(latencies) if latencies else 0.0
