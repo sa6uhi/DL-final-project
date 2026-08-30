@@ -47,7 +47,5 @@ def test_logger_emits_records() -> None:
     """Loggers created by the factory emit through the root handlers."""
     logger = get_logger("tests.logger.emission")
     assert logger.isEnabledFor(logging.INFO)
-    with_handlers = any(
-        isinstance(h, logging.StreamHandler) for h in logging.getLogger().handlers
-    )
+    with_handlers = any(isinstance(h, logging.StreamHandler) for h in logging.getLogger().handlers)
     assert with_handlers
