@@ -97,8 +97,9 @@ class DenoisingAutoencoder(nn.Module):
         self.encoder = nn.Sequential(*encoder_layers)
 
         decoder_layers: list[nn.Module] = []
+        rev_hidden = list(reversed(hidden_dims))
         for left, right in zip(
-            [latent_dim, *hidden_dims], [*hidden_dims, input_dim]
+            [latent_dim, *rev_hidden], [*rev_hidden, input_dim]
         ):
             decoder_layers.append(nn.Linear(left, right, bias=bias))
             if right != input_dim:
@@ -168,7 +169,10 @@ class DenoisingAutoencoder(nn.Module):
         """Compute per-sample anomaly residual scores.
 
         ``S(x) = ||x - x_bar||_2^2 + gamma * ||x - x_bar||_1`` where the
-        reconstruction is produced with corruption disabled.
+        reconstruction is produced with corruption disabled. The model is
+        temporarily switched to evaluation mode so Dropout and BatchNorm
+        running-statistic updates cannot corrupt the deterministic score, and
+        the prior training mode is restored afterwards.
 
         Args:
             x: Input tensor of shape ``(batch, input_dim)``.
@@ -187,8 +191,14 @@ class DenoisingAutoencoder(nn.Module):
             raise ValueError(f"l1_gamma must be non-negative, got {l1_gamma}")
         if reduction not in {"none", "mean", "sum"}:
             raise ValueError(f"Unsupported reduction: {reduction!r}")
-        with torch.no_grad():
-            x_hat = self.forward(x)
+        was_training = self.training
+        self.eval()
+        try:
+            with torch.no_grad():
+                x_hat = self.forward(x)
+        finally:
+            if was_training:
+                self.train()
         residual = x - x_hat
         scores = (residual.pow(2)).sum(dim=-1) + l1_gamma * residual.abs().sum(dim=-1)
         if reduction == "mean":

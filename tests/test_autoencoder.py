@@ -95,6 +95,42 @@ def test_encode_decode_shapes(ae: DenoisingAutoencoder, fake_matrix: np.ndarray)
     assert tuple(recon.shape) == tuple(x.shape)
 
 
+def test_decoder_expands_symmetrically_through_reversed_hiddens() -> None:
+    """Decoder reconstructs input_dim from the latent via reversed hidden dims."""
+    model = DenoisingAutoencoder(input_dim=100, encoder_hidden_dims=[256, 128], latent_dim=32)
+    decoder_ins = []
+    decoder_outs = []
+    for name, mod in model.decoder.named_children():
+        if isinstance(mod, torch.nn.Linear):
+            decoder_ins.append(mod.in_features)
+            decoder_outs.append(mod.out_features)
+    # Encoder narrows D -> 256 -> 128 -> 32; decoder must widen 32 -> 128 -> 256 -> D.
+    assert (decoder_ins, decoder_outs) == ([32, 128, 256], [128, 256, 100])
+
+
+def test_anomaly_score_enforces_eval_mode_and_restores_state(
+    ae: DenoisingAutoencoder,
+) -> None:
+    """anomaly_score runs deterministically and leaves training mode unchanged."""
+    x = torch.randn(8, ae.input_dim)
+    ae.train()
+    assert ae.training is True
+    bn = next(m for m in ae.encoder.modules() if isinstance(m, torch.nn.BatchNorm1d))
+    running_mean_before = bn.running_mean.clone()
+    scores = ae.anomaly_score(x)
+    assert ae.training is True
+    assert torch.equal(bn.running_mean, running_mean_before)
+    assert tuple(scores.shape) == (8,)
+    assert torch.equal(scores, ae.anomaly_score(x))
+
+
+def test_anomaly_score_eval_mode_does_not_toggle_training(ae: DenoisingAutoencoder) -> None:
+    """Calling anomaly_score in eval mode leaves the model in eval mode."""
+    ae.eval()
+    ae.anomaly_score(torch.randn(4, ae.input_dim))
+    assert ae.training is False
+
+
 def test_corrupt_keeps_shape_and_adjusts_values(ae: DenoisingAutoencoder) -> None:
     """Corruption preserves shape but modifies values."""
     x = torch.zeros(8, ae.input_dim)
