@@ -1,3 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fraud-detection-engine"
+version = "0.1.0"
+description = "Real-time fraud detection with FT-CAT, semi-supervised DAE, conformal prediction and high-throughput serving"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
 [tool.black]
 line-length = 100
 target-version = ["py314"]
@@ -13,6 +26,7 @@ exclude = '''
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra"
 filterwarnings = [
     "error::DeprecationWarning",
