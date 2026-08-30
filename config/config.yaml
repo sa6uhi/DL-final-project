@@ -1,0 +1,75 @@
+# Centralized configuration - single source of truth for all hyperparameters,
+# paths, and seeds. No module may hardcode values that belong here.
+project:
+  name: "Real-Time Financial Fraud Detection Engine"
+  version: "0.1.0"
+
+seed: 42
+
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  checkpoints: "models/checkpoints"
+  logs: "logs"
+  figures: "figures"
+  experiments: "experiments"
+
+logging:
+  level: "INFO"
+  log_file: "logs/system.log"
+  format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
+# ---------------------------------------------------------------------------
+# Semi-Supervised Deep Denoising Autoencoder
+# ---------------------------------------------------------------------------
+autoencoder:
+  input_dim: 100
+  encoder_hidden_dims: [256, 128]
+  latent_dim: 32
+  activation: "leaky_relu"
+  activation_slope: 0.2
+  dropout: 0.2
+  noise_std: 0.1
+  feature_dropout_prob: 0.1
+
+  training:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+    epochs: 50
+    batch_size: 256
+    num_workers: 4
+    pin_memory: true
+    early_stopping_patience: 8
+    min_delta: 1.0e-4
+    val_check_interval_epochs: 1
+
+  loss:
+    mse_weight: 0.5
+    bce_weight: 0.5
+
+  anomaly_score:
+    l1_gamma: 0.4
+    normalize_percentile: 99.9
+
+# ---------------------------------------------------------------------------
+# Hybrid Decision Gating - fuses DAE residuals with FT-Transformer posteriors
+# ---------------------------------------------------------------------------
+hybrid_gating:
+  alpha: 0.5
+
+# ---------------------------------------------------------------------------
+# Serving microservice
+# ---------------------------------------------------------------------------
+serving:
+  host: "0.0.0.0"
+  port: 8000
+  request_timeout_ms: 100
+  max_batch_size: 256
+  model_path: "models/checkpoints/autoencoder.pt"
+  transformer_path: "models/checkpoints/ft_transformer.pt"
+  max_history: 10000
+
+scoring:
+  approve_threshold: 0.15
+  block_threshold: 0.85
+  escalate_threshold: 0.50
