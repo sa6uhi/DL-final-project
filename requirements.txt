@@ -1,3 +1,6 @@
+# Runtime + tooling freeze. CPU-only PyTorch (multi-GB CUDA wheels only add
+# CI time). Pipeline extras live in requirements-ci.txt.
+--extra-index-url https://download.pytorch.org/whl/cpu
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2
@@ -45,7 +48,7 @@ PyYAML==6.0.3
 setuptools==78.1.0
 starlette==1.6.0
 sympy==1.14.0
-torch==2.13.0
+torch==2.13.0+cpu
 truststore==0.10.4
 typing-inspection==0.4.4
 typing_extensions==4.16.0

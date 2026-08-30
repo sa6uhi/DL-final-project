@@ -1,0 +1,6 @@
+# Full dependency set for the CI pipeline: runtime + formatting + lint + test.
+-r requirements.txt
+-r requirements-format.txt
+pytest==9.1.1
+pytest-cov==7.1.0
+httpx2==2.12.0
