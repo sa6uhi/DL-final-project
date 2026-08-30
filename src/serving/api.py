@@ -241,6 +241,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         try:
             result = app.state.scorer.score(request.features)
         except ValueError as exc:
+            app.state.errors_total += 1
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         latency_ms = (time.perf_counter() - start) * 1000.0
         app.state.latencies.append(latency_ms)
@@ -261,6 +262,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         try:
             results_raw = app.state.scorer.score_batch([t.features for t in request.transactions])
         except ValueError as exc:
+            app.state.errors_total += 1
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         latency_ms = (time.perf_counter() - start) * 1000.0
         app.state.latencies.append(latency_ms)
