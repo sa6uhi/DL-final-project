@@ -12,11 +12,11 @@ WORKDIR /app
 # Dependencies first so code edits reuse the install layer.
 COPY requirements.txt ./
 RUN pip install --upgrade pip --quiet \
-    && pip install --quiet -r requirements.txt \
-    && pip cache purge
+    && pip install --quiet -r requirements.txt
 
 COPY config/ ./config/
 COPY src/ ./src/
+COPY tests/ ./tests/
 COPY run_all.sh ./
 RUN chmod +x run_all.sh && useradd --system --uid 10001 --create-home appuser
 
