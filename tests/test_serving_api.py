@@ -107,6 +107,18 @@ def test_metrics_tracks_requests_and_latency(client: TestClient, features: list[
     assert body["errors_total"] == 0
 
 
+def test_route_validation_error_increments_errors_total(client: TestClient) -> None:
+    """A scoring ValueError is surfaced as 422 and counted in /metrics."""
+    response = client.post("/predict", json={"features": [0.1] * 8})
+    assert response.status_code == 422
+    metrics = client.get("/metrics").json()
+    assert metrics["errors_total"] >= 1
+    response = client.post("/stream", json={"transactions": [{"features": [0.1] * 8}]})
+    assert response.status_code == 422
+    metrics = client.get("/metrics").json()
+    assert metrics["errors_total"] >= 2
+
+
 def test_scorer_monotonic_probability(client: TestClient) -> None:
     """Larger residual scores imply larger fraud probabilities."""
     baseline = client.post("/predict", json={"features": [0.0] * 20}).json()
