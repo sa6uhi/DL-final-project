@@ -8,11 +8,13 @@ from fastapi.testclient import TestClient
 
 from src.serving.api import create_app
 from src.utils.config import Config
+from src.utils.seed import seed_everything
 
 
 @pytest.fixture()
 def client(tmp_path) -> TestClient:
     """Test client backed by a reference-model app with tmp config root."""
+    seed_everything(42)
     cfg = Config(
         {
             "autoencoder": {
