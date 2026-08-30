@@ -1,0 +1,26 @@
+# Training image: full training stack (CPU-only PyTorch), no inference concerns.
+
+FROM python:3.14-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Dependencies first so code edits reuse the install layer.
+COPY requirements.txt ./
+RUN pip install --upgrade pip --quiet \
+    && pip install --quiet -r requirements.txt \
+    && pip cache purge
+
+COPY config/ ./config/
+COPY src/ ./src/
+COPY run_all.sh ./
+RUN chmod +x run_all.sh && useradd --system --uid 10001 --create-home appuser
+
+USER appuser
+VOLUME ["/app/models", "/app/logs"]
+ENTRYPOINT ["sh"]
+CMD ["run_all.sh"]
