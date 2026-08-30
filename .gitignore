@@ -16,6 +16,7 @@ venv/
 # Data & generated artifacts (never versioned)
 data/
 figures/
+logs/
 models/checkpoints/
 *.pt
 *.onnx
