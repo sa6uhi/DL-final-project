@@ -1,0 +1,32 @@
+# build context
+.git
+.github
+*.md
+!README.md
+!AGENTS.md
+
+# environments
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# data & artifacts
+data/
+models/
+logs/
+figures/
+experiments/
+checkpoints/
+
+# secrets & personal docs
+.env
+.env.*
+*.key
+ProjectProposalV2.md
+dl_final_project.txt
+sabuhi.md
+task_division.md

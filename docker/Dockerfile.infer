@@ -1,0 +1,43 @@
+# Inference image: lean multi-stage build.
+# Stage 1 installs all deps into a venv (compilers/build cache, if any, stay here);
+# stage 2 ships only the venv + code as a non-root slim container.
+
+# syntax=docker/dockerfile:1.7
+FROM python:3.14-slim AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /build
+
+# Layer-cache friendly: requirements first, source last.
+COPY requirements.txt ./
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip --quiet \
+    && /opt/venv/bin/pip install --quiet -r requirements.txt
+
+FROM python:3.14-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+
+RUN useradd --system --uid 10001 --create-home appuser
+
+COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
+COPY --chown=appuser:appuser config/ ./config/
+COPY --chown=appuser:appuser src/ ./src/
+
+# Models are role-mounted on top of /app/models at deploy time.
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" || exit 1
+
+CMD ["uvicorn", "src.serving.api:app", "--host", "0.0.0.0", "--port", "8000"]

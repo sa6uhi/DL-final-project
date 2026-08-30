@@ -18,7 +18,10 @@ data/
 figures/
 logs/
 models/checkpoints/
+models/artifacts/
+experiments/
 *.pt
+*.pt2
 *.onnx
 *.pkl
 

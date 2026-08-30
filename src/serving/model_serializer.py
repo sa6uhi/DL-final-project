@@ -12,12 +12,16 @@ portable graph format.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from typing import Any
 
 import torch
+import onnxruntime
 from torch import nn
 
+from src.training.train_autoencoder import load_checkpoint
+from src.utils.config import load_config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -256,3 +260,111 @@ def verify_parity(
         )
     logger.info("Parity verified: max diff %.6e (tol %.1e)", max_diff, tolerance)
     return max_diff
+
+
+class ScoreModule(nn.Module):
+    """Wrap a model exposing ``anomaly_score`` as a ``(batch, 1)`` scorer.
+
+    Both the trained ``DenoisingAutoencoder`` and the ``ReferenceEncoder``
+    implement ``anomaly_score(x)`` returning ``(batch,)`` residuals; this
+    module makes them traceable by ``torch.export``/``torch.onnx`` while
+    emitting scores of shape ``(batch, 1)``.
+
+    Args:
+        base: The underlying model (must expose ``anomaly_score``).
+        l1_gamma: Scaling of the L1 residual term used by the autoencoder.
+    """
+
+    def __init__(self, base: nn.Module, l1_gamma: float = 0.4) -> None:
+        """Initialize the wrapper around ``base``."""
+        super().__init__()
+        self.base = base
+        self.l1_gamma = l1_gamma
+        self.eval()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return per-sample anomaly scores of shape ``(batch, 1)``.
+
+        Args:
+            x: Input tensor of shape ``(batch, input_dim)``.
+
+        Returns:
+            Score tensor of shape ``(batch, 1)``.
+        """
+        scores = self.base.anomaly_score(x, l1_gamma=self.l1_gamma)
+        return scores.unsqueeze(-1)
+
+
+def _resolve_model(input_dir: str | Path, config: dict) -> tuple[nn.Module, Path]:
+    """Load the trained checkpoint or fall back to the reference model.
+
+    Args:
+        input_dir: Directory scanned for a serialized checkpoint.
+        config: Loaded configuration dict.
+
+    Returns:
+        Tuple of ``(model, source_path)``; the source path is the checkpoint
+        when one was found.
+    """
+    source = Path(input_dir) / "autoencoder.pt"
+    if source.is_file():
+        model = load_checkpoint(source)
+        logger.info("Loaded trained checkpoint %s", source)
+        return model, source
+    logger.warning("Checkpoint %s missing; exporting the reference model", source)
+    model = build_reference_model(int(config["autoencoder"]["input_dim"]))
+    return model, source
+
+
+def export_all(input_dir: str | Path, output_dir: str | Path, config: dict) -> dict[str, float]:
+    """Export EXIR + ONNX artifacts and verify parity on a sample batch.
+
+    Both the deep autoencoder and the reference scorer expose
+    ``anomaly_score``; each is wrapped so the exported graph emits per-sample
+    scores of shape ``(batch, 1)`` with identical semantics.
+
+    Args:
+        input_dir: Directory scanned for the trained checkpoint.
+        output_dir: Destination directory for serialized artifacts.
+        config: Loaded configuration dict.
+
+    Returns:
+        Dict of artifact name to measured parity error.
+    """
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    model, _ = _resolve_model(input_path, config)
+    l1_gamma = float(config.get("autoencoder", {}).get("anomaly_score", {}).get("l1_gamma", 0.4))
+    scorer = ScoreModule(model, l1_gamma=l1_gamma)
+    input_dim = int(config["autoencoder"]["input_dim"])
+    sample = torch.randn(4, input_dim)
+    exir_path = output_path / "autoencoder.pt2"
+    onnx_path = output_path / "autoencoder.onnx"
+    export_exir(scorer, exir_path, sample)
+    export_onnx(scorer, onnx_path, sample)
+    exir_module = load_exir(exir_path)
+    exir_diff = verify_parity(scorer, exir_module, sample)
+    onnx_session = onnxruntime.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    input_name = onnx_session.get_inputs()[0].name
+    onnx_out = torch.from_numpy(onnx_session.run(None, {input_name: sample.numpy()})[0]).reshape(
+        -1, 1
+    )
+    onnx_diff = verify_parity(scorer, onnx_out, sample)
+    return {"exir_max_diff": round(exir_diff, 8), "onnx_max_diff": round(onnx_diff, 8)}
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: ``python src/serving/model_serializer.py``."""
+    parser = argparse.ArgumentParser(description="Serialize model to EXIR/ONNX with parity checks")
+    parser.add_argument("--input", required=True, help="Checkpoint directory")
+    parser.add_argument("--output", required=True, help="Serialized artifact directory")
+    parser.add_argument("--config", default="config/config.yaml", help="Path to config.yaml")
+    args = parser.parse_args(argv)
+    config = load_config(args.config)
+    report = export_all(args.input, args.output, config)
+    logger.info("Serialization report: %s", report)
+
+
+if __name__ == "__main__":
+    main()

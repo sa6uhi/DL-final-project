@@ -118,3 +118,34 @@ def test_load_exir_missing_raises(tmp_path: Path) -> None:
     """Loading a nonexistent EXIR artifact raises FileNotFoundError."""
     with pytest.raises(FileNotFoundError):
         load_exir(tmp_path / "missing.pt2")
+
+
+def test_export_all_falls_back_to_reference(tmp_path: Path) -> None:
+    """Missing checkpoints fall back to the reference scorer and still export."""
+    from src.serving.model_serializer import export_all
+
+    config = {"autoencoder": {"input_dim": 8}}
+    report = export_all(tmp_path / "nope", tmp_path / "out", config)
+    assert (tmp_path / "out" / "autoencoder.pt2").exists()
+    assert (tmp_path / "out" / "autoencoder.onnx").exists()
+    assert report["exir_max_diff"] < 1e-4
+    assert report["onnx_max_diff"] < 1e-4
+
+
+def test_export_all_cli_main(tmp_path: Path, monkeypatch) -> None:
+    """CLI entry point wires config + dirs to export_all."""
+    from src.serving.model_serializer import main
+
+    out_dir = tmp_path / "out"
+    main(
+        [
+            "--input",
+            str(tmp_path / "nope"),
+            "--output",
+            str(out_dir),
+            "--config",
+            str(Path("config") / "config.yaml"),
+        ]
+    )
+    assert (out_dir / "autoencoder.pt2").exists()
+    assert (out_dir / "autoencoder.onnx").exists()
