@@ -26,7 +26,7 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-DEFAULT_OPSET = 17
+DEFAULT_OPSET = 18
 PARITY_TOLERANCE = 1.0e-4
 
 
