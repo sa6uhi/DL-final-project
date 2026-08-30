@@ -74,3 +74,15 @@ scoring:
   approve_threshold: 0.15
   block_threshold: 0.85
   escalate_threshold: 0.50
+
+# ---------------------------------------------------------------------------
+# Evaluation experiments (Exp-5 latency, Exp-6 DAE anomaly evaluation)
+# ---------------------------------------------------------------------------
+evaluation:
+  latency:
+    n_warmup: 10
+    n_runs: 200
+    batch_sizes: [1, 8, 32, 64]
+  anomaly_eval:
+    max_fpr: 0.01
+    alpha_sweep: [0.0, 0.25, 0.5, 0.75, 1.0]
