@@ -108,9 +108,7 @@ def test_sweep_alpha_ends_are_pure_sources() -> None:
     )
     assert [r["alpha"] for r in records] == [0.0, 1.0]
     assert all(0.0 <= r["rocauc"] <= 1.0 for r in records)
-    # Pure-posterior blend matches scoring the probabilities directly.
     assert records[0]["rocauc"] == pytest.approx(roc_auc(probs, labels))
-    # Pure-anomaly blend must not fall below the zero-information baseline.
     assert records[1]["rocauc"] >= 0.5
 
 
