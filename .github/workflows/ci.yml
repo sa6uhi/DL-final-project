@@ -67,7 +67,7 @@ jobs:
             requirements-ci.txt
 
       - name: Install test dependencies
-        run: uv pip install -r requirements-ci.txt
+        run: uv pip install --index-strategy unsafe-best-match --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-ci.txt
 
       - name: Prune uv cache before save
         run: uv cache prune --ci
