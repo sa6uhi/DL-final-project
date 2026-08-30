@@ -93,6 +93,14 @@ docker compose -f docker/docker-compose.yml up --build
 docker compose --profile train -f docker/docker-compose.yml up --build
 ```
 
+The API is served by uvicorn through `docker/entrypoint-infer.sh`. Inference is
+CPU-bound, so the worker count defaults to `1` (each worker loads its own model
+copy) and can be scaled across cores via `UVICORN_WORKERS`:
+
+```bash
+UVICORN_WORKERS=4 docker compose -f docker/docker-compose.yml up --build
+```
+
 Mount your `models/checkpoints/` volume (with `autoencoder.pt` / `autoencoder.onnx`)
 at deploy time so the API serves your trained artifacts.
 

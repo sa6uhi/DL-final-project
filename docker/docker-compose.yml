@@ -11,6 +11,7 @@ services:
       - "8000:8000"
     environment:
       - CONFIG_PATH=/app/config/config.yaml
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-1}
     volumes:
       - ../models/checkpoints:/app/models/checkpoints:ro
       - ../logs:/app/logs

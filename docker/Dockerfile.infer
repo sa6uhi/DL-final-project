@@ -31,6 +31,8 @@ RUN useradd --system --uid 10001 --create-home appuser
 COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
 COPY --chown=appuser:appuser config/ ./config/
 COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser docker/entrypoint-infer.sh ./entrypoint-infer.sh
+RUN chmod +x ./entrypoint-infer.sh
 
 # Models are role-mounted on top of /app/models at deploy time.
 USER appuser
@@ -40,4 +42,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" || exit 1
 
-CMD ["uvicorn", "src.serving.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./entrypoint-infer.sh"]
