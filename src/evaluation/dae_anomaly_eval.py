@@ -98,13 +98,10 @@ def sweep_alpha(
     records: list[dict[str, float]] = []
     for alpha in alphas:
         gate = HybridGate(alpha=float(alpha), normalizer=normalizer)
-        fused = (
-            gate.fuse(
-                torch.as_tensor(eval_scores, dtype=torch.float32),
-                torch.as_tensor(probabilities_ft, dtype=torch.float32),
-            )
-            .numpy()
-        )
+        fused = gate.fuse(
+            torch.as_tensor(eval_scores, dtype=torch.float32),
+            torch.as_tensor(probabilities_ft, dtype=torch.float32),
+        ).numpy()
         metrics = summarize(fused, labels, max_fpr=max_fpr)
         records.append({"alpha": float(alpha), **metrics})
         logger.info("alpha=%s -> %s", alpha, metrics)
