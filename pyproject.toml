@@ -1,0 +1,19 @@
+[tool.black]
+line-length = 100
+target-version = ["py314"]
+exclude = '''
+/(
+    venv
+  | \.venv
+  | \.git
+  | data
+  | figures
+  | models
+)/'''
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = [
+    "error::DeprecationWarning",
+]
