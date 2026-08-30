@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Environments
+.env
+
+# Data & generated artifacts (never versioned)
+data/
+figures/
+models/checkpoints/
+*.pt
+*.onnx
+*.pkl
+
+# IDE
+.idea/
+.vscode/
+*.swp
