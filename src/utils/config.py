@@ -101,7 +101,9 @@ class Config(dict):
         if value is _MISSING:
             raise KeyError(f"Config key {key!r} does not exist")
         if not isinstance(value, str):
-            raise TypeError(f"Config key {key!r} must be a string path, got {type(value)}")
+            raise TypeError(
+                f"Config key {key!r} must be a string path, got {type(value)}"
+            )
         path = Path(value)
         return path if path.is_absolute() else (self._base_dir / path).resolve()
 
@@ -146,7 +148,9 @@ class Config(dict):
         """
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
-            yaml.safe_dump(self.to_dict(), fh, sort_keys=False, default_flow_style=False)
+            yaml.safe_dump(
+                self.to_dict(), fh, sort_keys=False, default_flow_style=False
+            )
 
     def save_json(self, path: str | Path) -> None:
         """Persist the configuration to a JSON file.

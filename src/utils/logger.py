@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import Any
 
 _FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
