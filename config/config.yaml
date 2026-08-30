@@ -68,6 +68,7 @@ serving:
   model_path: "models/checkpoints/autoencoder.pt"
   transformer_path: "models/checkpoints/ft_transformer.pt"
   max_history: 10000
+  anomaly_const: 2.0
 
 scoring:
   approve_threshold: 0.15
