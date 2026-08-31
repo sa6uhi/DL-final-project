@@ -3,9 +3,9 @@ import numpy as np
 import pickle
 from typing import Tuple,Dict,Any
 from sklearn.preprocessing import RobustScaler
-# Swap with `from src.utils.config import get_config`
-import logging
-logger = logging.getLogger(__name__)
+from src.utils.config import load_config
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 class FraudPreprocessor:
     """Handles scaling, missingness indicators, and categorical encoding."""
