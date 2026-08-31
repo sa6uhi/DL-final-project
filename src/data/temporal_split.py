@@ -1,10 +1,8 @@
 import pandas as pd
 import numpy as np
 from typing import Tuple
-# Swap with `from src.utils.logger import get_logger` once Member C finishes it
-
-import logging
-logger=logging.getLogger(__name__)
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 def load_and_merge_data(transaction_path:str,identity_path:str)->pd.DataFrame:
     """Loads and merges transaction and identity datasets.
