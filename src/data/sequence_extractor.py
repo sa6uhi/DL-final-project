@@ -1,9 +1,8 @@
 import pandas as pd
 import numpy as np
 from typing import List
-# Swap with `from src.utils.logger import get_logger` once Member C finishes it
-import logging
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 def build_historical_sequences(
     df: pd.DataFrame,
