@@ -52,6 +52,54 @@ autoencoder:
     normalize_percentile: 99.9
 
 # ---------------------------------------------------------------------------
+# Supervised Feature-Tokenizer Cross-Attention Transformer (FT-CAT)
+# ---------------------------------------------------------------------------
+transformer:
+  d_model: 32
+  n_heads: 4
+  dim_feedforward: 64
+  n_layers: 2
+  dropout: 0.1
+  activation: "gelu"
+  norm_first: true
+  seq_len: 5
+  n_continuous: 100
+  categorical_cardinalities: []
+  use_cross_attention: true
+
+  training:
+    lr: 3.0e-4
+    weight_decay: 1.0e-2
+    epochs: 30
+    batch_size: 256
+    warmup_epochs: 5
+    grad_clip: 5.0
+    amp: true
+    num_workers: 4
+    pin_memory: true
+    early_stopping_patience: 5
+    min_delta: 1.0e-4
+
+  loss:
+    name: "focal"
+    gamma: 2.0
+    alpha: 0.25
+    pos_weight: null
+
+  # Exp-3: FT-CAT vs self-attention-only vs MLP architecture ablation
+  ablation:
+    variants: ["ft_cat", "ft_self_only", "mlp"]
+    seeds: [42, 43, 44]
+    epochs: 10
+
+  # Exp-4: Focal Loss gamma/alpha sensitivity sweep vs weighted BCE control
+  focal_sweep:
+    gammas: [0.5, 1.0, 2.0, 3.0, 5.0]
+    alphas: [0.1, 0.25, 0.5]
+    epochs: 8
+    seeds: [42]
+
+# ---------------------------------------------------------------------------
 # Hybrid Decision Gating - fuses DAE residuals with FT-Transformer posteriors
 # ---------------------------------------------------------------------------
 hybrid_gating:
