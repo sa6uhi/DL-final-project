@@ -86,8 +86,8 @@ def test_focal_never_exceeds_bce_for_default_gamma(
     assert bool((focal <= bce + 1e-6).all())
 
 
-
 # Numerical stability
+
 
 @pytest.mark.parametrize("magnitude", [20.0, 50.0, 80.0, 200.0])
 def test_saturated_logits_stay_finite(magnitude: float) -> None:
@@ -123,6 +123,7 @@ def test_gradient_is_nonzero_for_hard_examples(
 
 
 # Reductions, dtypes and shapes
+
 
 def test_reduction_modes_are_consistent(
     logits_and_targets: tuple[torch.Tensor, torch.Tensor],
@@ -164,6 +165,7 @@ def test_empty_batch_does_not_raise() -> None:
 
 # Defensive validation
 
+
 def test_negative_gamma_rejected() -> None:
     """gamma must be non-negative."""
     logits = torch.randn(4)
@@ -198,7 +200,9 @@ def test_targets_outside_unit_interval_rejected() -> None:
     with pytest.raises(ValueError, match=r"targets must lie in \[0, 1\]"):
         focal_loss_with_logits(torch.randn(3), torch.tensor([-1.0, 0.0, 1.0]))
 
+
 # Weighted BCE control
+
 
 def test_weighted_bce_matches_torch_reference(
     logits_and_targets: tuple[torch.Tensor, torch.Tensor],
@@ -252,7 +256,9 @@ def test_compute_pos_weight_degrades_gracefully(targets: torch.Tensor) -> None:
     """Degenerate label tensors fall back to 1.0 instead of dividing by zero."""
     assert compute_pos_weight(targets) == 1.0
 
+
 # Module wrappers and the config-driven factory
+
 
 def test_focal_module_matches_functional(
     logits_and_targets: tuple[torch.Tensor, torch.Tensor],

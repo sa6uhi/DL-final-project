@@ -107,7 +107,7 @@ def weighted_bce_with_logits(
 
 
 def compute_pos_weight(targets: torch.Tensor) -> float:
-    """Derive the imbalance ratio ``n_negative / n_positive`` from labels. """
+    """Derive the imbalance ratio ``n_negative / n_positive`` from labels."""
     if targets.numel() == 0:
         logger.warning("compute_pos_weight received an empty tensor; defaulting to 1.0")
         return 1.0
