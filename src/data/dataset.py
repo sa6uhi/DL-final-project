@@ -3,8 +3,8 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
 from typing import Tuple, Optional
-import logging
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 class TransactionSequenceDataset(Dataset):
     """PyTorch Dataset yielding current features, historical sequences, and labels."""
