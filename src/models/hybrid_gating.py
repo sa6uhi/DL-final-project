@@ -97,7 +97,11 @@ class PercentileNormalizer:
         Returns:
             Dict mapping parameter names to values.
         """
-        return {"percentile": self.percentile, "epsilon": self.epsilon, "cap": self.cap if self.cap is not None else -1.0}
+        return {
+            "percentile": self.percentile,
+            "epsilon": self.epsilon,
+            "cap": self.cap if self.cap is not None else -1.0,
+        }
 
     @classmethod
     def from_state_dict(cls, state: dict[str, float]) -> "PercentileNormalizer":
@@ -134,9 +138,7 @@ class HybridGate:
         self.alpha = float(alpha)
         self.normalizer = normalizer if normalizer is not None else PercentileNormalizer()
 
-    def fuse(
-        self, anomaly_scores: torch.Tensor, probability_ft: torch.Tensor
-    ) -> torch.Tensor:
+    def fuse(self, anomaly_scores: torch.Tensor, probability_ft: torch.Tensor) -> torch.Tensor:
         """Compute the blended final risk score.
 
         Args:

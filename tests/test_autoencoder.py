@@ -242,33 +242,50 @@ def test_load_missing_checkpoint_raises(tmp_path: Path) -> None:
         load_checkpoint(tmp_path / "missing.pt")
 
 
-def test_load_feature_matrix_npy(tmp_path: Path) -> None:
-    """_load_feature_matrix loads .npy feature matrices."""
-    from src.training.train_autoencoder import _load_feature_matrix
+def test_load_legit_features_filters_rows_and_columns(tmp_path: Path) -> None:
+    """_load_legit_features keeps only legit rows and numeric feature cols."""
+    from src.training.train_autoencoder import _load_legit_features
 
-    data = np.zeros((10, 8), dtype=np.float32)
-    path = tmp_path / "features.npy"
-    np.save(path, data)
-    loaded = _load_feature_matrix(path)
-    assert np.array_equal(loaded, data)
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "TransactionID": [1, 2, 3, 4],
+            "isFraud": [0, 0, 1, 0],
+            "feat_a": [0.1, 0.2, 0.3, 0.4],
+            "feat_b": [1, 2, 3, 4],
+            "cat": ["x", "y", "x", "z"],
+        }
+    )
+    path = tmp_path / "train.parquet"
+    df.to_parquet(path, index=False)
+
+    loaded = _load_legit_features(path, non_feature_cols=["TransactionID", "isFraud"])
+    assert loaded.shape == (3, 2)
+    assert loaded.dtype == np.float32
+    assert list(loaded[:, 0]) == [0.1, 0.2, 0.4]
 
 
-def test_load_feature_matrix_missing_raises(tmp_path: Path) -> None:
-    """_load_feature_matrix raises FileNotFoundError for missing files."""
-    from src.training.train_autoencoder import _load_feature_matrix
+def test_load_legit_features_missing_raises(tmp_path: Path) -> None:
+    """_load_legit_features raises FileNotFoundError for missing files."""
+    from src.training.train_autoencoder import _load_legit_features
 
     with pytest.raises(FileNotFoundError):
-        _load_feature_matrix(tmp_path / "nope.npy")
+        _load_legit_features(tmp_path / "nope.parquet", non_feature_cols=["isFraud"])
 
 
-def test_load_feature_matrix_unsupported_raises(tmp_path: Path) -> None:
-    """_load_feature_matrix raises ValueError for unsupported suffixes."""
-    from src.training.train_autoencoder import _load_feature_matrix
+def test_load_legit_features_no_numeric_raises(tmp_path: Path) -> None:
+    """_load_legit_features raises ValueError when no numeric features exist."""
+    from src.training.train_autoencoder import _load_legit_features
 
-    path = tmp_path / "features.pt"
-    path.write_bytes(b"fake")
-    with pytest.raises(ValueError):
-        _load_feature_matrix(path)
+    import pandas as pd
+
+    df = pd.DataFrame({"isFraud": [0, 0], "cat": ["x", "y"]})
+    path = tmp_path / "train.parquet"
+    df.to_parquet(path, index=False)
+
+    with pytest.raises(ValueError, match="No numeric feature"):
+        _load_legit_features(path, non_feature_cols=["isFraud"])
 
 
 def test_train_reduces_loss(config_small, tmp_path: Path) -> None:

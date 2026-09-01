@@ -60,15 +60,11 @@ class DenoisingAutoencoder(nn.Module):
         if latent_dim <= 0:
             raise ValueError(f"latent_dim must be positive, got {latent_dim}")
         if not 0 <= feature_dropout_prob <= 1:
-            raise ValueError(
-                f"feature_dropout_prob must be in [0, 1], got {feature_dropout_prob}"
-            )
+            raise ValueError(f"feature_dropout_prob must be in [0, 1], got {feature_dropout_prob}")
 
         hidden_dims = list(encoder_hidden_dims) if encoder_hidden_dims else [256, 128]
         if any(left <= right for left, right in zip(hidden_dims, hidden_dims[1:])):
-            raise ValueError(
-                f"encoder_hidden_dims must strictly decrease: got {hidden_dims}"
-            )
+            raise ValueError(f"encoder_hidden_dims must strictly decrease: got {hidden_dims}")
         if hidden_dims[-1] <= latent_dim:
             raise ValueError(
                 f"Encoder must narrow to the latent dim; got hidden {hidden_dims} "
@@ -98,9 +94,7 @@ class DenoisingAutoencoder(nn.Module):
 
         decoder_layers: list[nn.Module] = []
         rev_hidden = list(reversed(hidden_dims))
-        for left, right in zip(
-            [latent_dim, *rev_hidden], [*rev_hidden, input_dim]
-        ):
+        for left, right in zip([latent_dim, *rev_hidden], [*rev_hidden, input_dim]):
             decoder_layers.append(nn.Linear(left, right, bias=bias))
             if right != input_dim:
                 decoder_layers.append(leaky)
@@ -229,13 +223,9 @@ class DenoisingAutoencoder(nn.Module):
             ValueError: If the tensors are not shape-compatible.
         """
         if x.shape != x_hat.shape:
-            raise ValueError(
-                f"Shape mismatch: x {tuple(x.shape)} vs x_hat {tuple(x_hat.shape)}"
-            )
+            raise ValueError(f"Shape mismatch: x {tuple(x.shape)} vs x_hat {tuple(x_hat.shape)}")
         mse_term = nn.functional.mse_loss(x_hat, x)
-        bce_term = nn.functional.binary_cross_entropy_with_logits(
-            x_hat, x.clamp(0.0, 1.0)
-        )
+        bce_term = nn.functional.binary_cross_entropy_with_logits(x_hat, x.clamp(0.0, 1.0))
         return mse_weight * mse_term + bce_weight * bce_term
 
     def init_weights(self) -> None:
