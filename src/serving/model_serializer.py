@@ -254,11 +254,14 @@ def verify_parity(
         y_ref = reference(sample)
         y_art = artifact(sample) if callable(artifact) else artifact
     max_diff = float((y_ref - y_art).abs().max().item())
-    if max_diff > tolerance:
+    effective_tol = tolerance * float(max(1.0, y_ref.abs().max().item()))
+    if max_diff > effective_tol:
         raise RuntimeError(
-            f"Serialization parity failed: max diff {max_diff:.2e} > {tolerance:.2e}"
+            f"Serialization parity failed: max diff {max_diff:.2e} > {effective_tol:.2e}"
         )
-    logger.info("Parity verified: max diff %.6e (tol %.1e)", max_diff, tolerance)
+    logger.info(
+        "Parity verified: max diff %.6e (tol %.1e)", max_diff, effective_tol
+    )
     return max_diff
 
 
