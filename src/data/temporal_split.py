@@ -46,9 +46,9 @@ def split_temporal(df:pd.DataFrame,time_col:str="TransactionDT")->Tuple[pd.DataF
     idx_train_end=int(n_total*0.7)
     idx_val_end=int(n_total*0.85)
 
-    train_df=df.iloc[:idx_train_end].copy()
-    val_df=df.iloc[idx_train_end:idx_val_end].copy()
-    test_df=df.iloc[idx_val_end:].copy()
+    train_df = df.iloc[:idx_train_end].reset_index(drop=True)
+    val_df = df.iloc[idx_train_end:idx_val_end].reset_index(drop=True)
+    test_df = df.iloc[idx_val_end:].reset_index(drop=True)
 
     # ZERO LEAKAGE ASSERTION (Crucial for IEEE Paper)
     max_train_time=train_df[time_col].max()
