@@ -33,44 +33,41 @@ echo "=== Pipeline started $(date -u +%F\ %T) ==="
 export PYTHONHASHSEED=42
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
-# 1) Data preparation & temporal split (Member A) - skipped when raw data absent
-if [ -d "data/raw" ] && [ "$(find data/raw -type f | wc -l)" -gt 0 ]; then
-    run "Data preparation step" src/data/temporal_split.py --input data/raw/ --output data/processed/
+# 1) Data ingestion (download from public mirror when raw data absent)
+if [ -f "data/raw/train_transaction.csv" ]; then
+    echo "==> Raw data present, skipping download."
 else
-    echo "==> Data prep: no raw data mounted, skipping (run with data/raw mounted)."
+    run "Data download" -m src.data.download_data
 fi
 
-# 2) Baselines (Member A) - optional until raw data present
-if [ -f "data/processed/features.npz" ]; then
-    run "Baseline training" src/training/train_baselines.py --config "$CONFIG"
+# 2) Data preparation & temporal split (skipped when raw data absent)
+if [ -f "data/raw/train_transaction.csv" ]; then
+    run "Data preparation step" -m src.data.prepare_data
 else
-    echo "==> Baselines: processed features absent, skipping."
+    echo "==> Data prep: raw data absent, skipping."
 fi
 
-# 3) Supervised FT-CAT transformer (Member B) - guarded by the same inputs
-if [ -f "data/processed/features.npz" ]; then
-    run "FT-CAT transformer training" src/training/train_transformer.py --config "$CONFIG"
+# 3) Semi-supervised DAE autoencoder
+if [ -f "data/processed/train.parquet" ]; then
+    run "DAE autoencoder training" src/training/train_autoencoder.py --config "$CONFIG"
 else
-    echo "==> Transformer: processed features absent, skipping."
+    echo "==> Autoencoder: processed parquet absent, skipping."
 fi
 
-# 4) Semi-supervised DAE autoencoder (Member C)
-run "DAE autoencoder training" src/training/train_autoencoder.py --config "$CONFIG"
-
-# 5) Serialize model artifacts (EXIR + ONNX) with parity verification
+# 4) Serialize model artifacts (EXIR + ONNX) with parity verification
 run "Model serialization" src/serving/model_serializer.py --input models/checkpoints/ --output models/artifacts/
 
-# 6) Exp-5 latency & throughput benchmark
+# 5) Exp-5 latency & throughput benchmark
 run "Latency benchmark (Exp-5)" src/evaluation/latency_benchmark.py --config "$CONFIG"
 
-# 7) Exp-6 anomaly evaluation when the scored archive is present
+# 6) Exp-6 anomaly evaluation when the scored archive is present
 if [ -f "data/processed/anomaly_eval.npz" ]; then
     run "Anomaly evaluation (Exp-6)" src/evaluation/dae_anomaly_eval.py --config "$CONFIG" --archive data/processed/anomaly_eval.npz
 else
     echo "==> Anomaly eval: scored archive absent, skipping."
 fi
 
-# 8) Unit test gate (>=80% coverage enforced by pytest)
+# 7) Unit test gate (>=80% coverage enforced by pytest)
 run "Unit test gate" -m pytest --cov=src --cov-fail-under=80 tests/ -q
 
 } 2>&1 | tee "$MAIN_LOG"
