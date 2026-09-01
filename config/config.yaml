@@ -134,3 +134,36 @@ evaluation:
   anomaly_eval:
     max_fpr: 0.01
     alpha_sweep: [0.0, 0.25, 0.5, 0.75, 1.0]
+
+# ---------------------------------------------------------------------------
+# Member A: Data Ingestion & Pipeline Configuration
+# ---------------------------------------------------------------------------
+data:
+  raw_dir: "data/raw"
+  raw_transaction_path: "data/raw/train_transaction.csv"
+  raw_identity_path: "data/raw/train_identity.csv"
+  processed_dir: "data/processed"
+  preprocessor_path: "data/processed/preprocessor.pkl"
+
+split:
+  time_col: "TransactionDT"
+
+sequence:
+  group_cols:
+    - "card1"
+    - "addr1"
+  k_window: 5
+  feature_cols:
+    - "TransactionAmt"
+    - "D1"
+    - "D2"
+    - "D3"
+    - "D4"
+    - "D5"
+    - "D6"
+    - "D8"
+    - "D9"
+    - "D15"
+
+features:
+  target_col: "isFraud"
