@@ -36,7 +36,7 @@ def build_historical_sequences(
         raise ValueError("Window size must be greater than 0")
 
     logger.info(f"Building historical sequences (K={k}) for {len(df)} records...")
-    df_out=df.copy()
+    df_out = df.reset_index(drop=True)
     d_features=len(seq_feature_cols)
 
     # 1. Create K lagged versions of the sequence features
