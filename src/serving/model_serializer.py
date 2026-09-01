@@ -259,9 +259,7 @@ def verify_parity(
         raise RuntimeError(
             f"Serialization parity failed: max diff {max_diff:.2e} > {effective_tol:.2e}"
         )
-    logger.info(
-        "Parity verified: max diff %.6e (tol %.1e)", max_diff, effective_tol
-    )
+    logger.info("Parity verified: max diff %.6e (tol %.1e)", max_diff, effective_tol)
     return max_diff
 
 
