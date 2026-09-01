@@ -67,8 +67,8 @@ def build_historical_sequences(
     sequences=np.nan_to_num(sequences, nan=0.0)
 
     # 5. Assign the list of numpy arrays back to the DataFrame
-    # We convert the 3D numpy array to a list of 2D arrays so Pandas can store it in a single column
-    df_out['sequence_array']=list(sequences)
+    # Convert 3D numpy array to list-of-lists so Parquet can save it perfectly
+    df_out['sequence_array'] = sequences.tolist()
 
     logger.info(f"Successfully generated sequences. Final shape per row: ({k}, {d_features})")
     return df_out
