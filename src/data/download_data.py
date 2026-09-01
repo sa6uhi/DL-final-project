@@ -1,85 +1,93 @@
 """
-Automated data ingestion script for the IEEE-CIS Fraud Detection dataset.
-Uses the Kaggle API to download and extract the data into data/raw/.
+Download the IEEE-CIS Fraud Detection raw CSVs into data/raw/.
 
-Usage:
-    1. Ensure you have installed the kaggle package: pip install kaggle
-    2. Ensure your Kaggle API token is placed at ~/.kaggle/kaggle.json
-       (Go to https://www.kaggle.com/settings -> API -> Create New Token)
-    3. Run: python download_data.py
+Idempotent: skips download if train_transaction.csv already exists.
 """
 
-import zipfile
-import shutil
 from pathlib import Path
+from urllib.request import Request, urlopen
+from typing import List
+
 from src.utils.logger import get_logger
+
 logger = get_logger(__name__)
 
+DATASET_REPO = "aliceczr/ieee-fraud-detection"
+RESOLVE_URL = f"https://huggingface.co/datasets/{DATASET_REPO}/resolve/main"
+FILES: List[str] = ["train_transaction.csv", "train_identity.csv"]
+EXPECTED_SIZES = {
+    "train_transaction.csv": 683_351_067,
+    "train_identity.csv": 26_529_680,
+}
 
-# IEEE-CIS Kaggle Competition slug
-COMPETITION_SLUG = "ieee-fraud-detection"
+
+def _download_file(url: str, dest: Path) -> None:
+    """Stream a file from ``url`` to ``dest``.
+
+    Args:
+        url: Full remote URL to download.
+        dest: Local destination path.
+
+    Raises:
+        OSError: If the download fails.
+    """
+    logger.info(f"Downloading {url} -> {dest}")
+    request = Request(url, headers={"User-Agent": "dl-final-project/0.1"})
+    with urlopen(request, timeout=120) as response, dest.open("wb") as out:
+        total = int(response.headers.get("Content-Length", 0))
+        downloaded = 0
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            out.write(chunk)
+            downloaded += len(chunk)
+            if total:
+                percent = downloaded / total * 100
+                logger.info(
+                    "  %s: %d/%d MB (%.1f%%)",
+                    dest.name,
+                    downloaded // (1024 * 1024),
+                    total // (1024 * 1024),
+                    percent,
+                )
+    logger.info(f"Finished downloading {dest.name} ({downloaded} bytes)")
 
 
 def download_and_extract_data(target_dir: Path) -> None:
-    """Downloads dataset from Kaggle and extracts it to target_dir.
+    """Download the IEEE-CIS raw CSVs into ``target_dir``.
 
     Args:
-        target_dir: The directory where raw CSVs should be placed.
+        target_dir: Directory where the raw CSVs should be placed.
 
     Raises:
-        OSError: If the Kaggle API token is missing or invalid.
-        RuntimeError: If the download fails for other reasons.
+        OSError: If a download fails or a file fails the size check.
     """
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Check if data is already downloaded (Idempotency)
-    train_file = target_dir / "train_transaction.csv"
-    if train_file.exists():
-        logger.info("Raw data already exists in data/raw/. Skipping download.")
+    if (target_dir / "train_transaction.csv").exists():
+        logger.info("Raw data already exists in %s. Skipping download.", target_dir)
         return
 
-    logger.info(f"Downloading {COMPETITION_SLUG} dataset from Kaggle...")
+    logger.info("Downloading IEEE-CIS fraud detection data from Hugging Face mirror...")
 
-    try:
-        # Import kaggle inside the function so it doesn't crash the whole
-        import kaggle
-    except ImportError:
-        raise ImportError(
-            "The 'kaggle' package is required to download data. "
-            "Please run: pip install kaggle"
-        )
+    for name in FILES:
+        _download_file(f"{RESOLVE_URL}/{name}", target_dir / name)
 
-    try:
-        # Download the competition files to a temporary zip path
-        zip_path = target_dir / f"{COMPETITION_SLUG}.zip"
-        kaggle.api.competition_download_files(COMPETITION_SLUG, path=str(target_dir))
+    for name in FILES:
+        dest = target_dir / name
+        size = dest.stat().st_size
+        expected = EXPECTED_SIZES[name]
+        if size != expected:
+            raise OSError(
+                f"Downloaded {name} size mismatch: got {size} bytes, " f"expected {expected} bytes."
+            )
 
-        logger.info("Download complete. Extracting zip file...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(target_dir)
-
-        # 3. Clean up the zip file to save disk space
-        zip_path.unlink()
-        logger.info(f"Extraction complete. Raw CSVs saved to {target_dir}")
-
-    except Exception as e:
-        # Provide a highly specific error message if Kaggle auth fails
-        if "401" in str(e) or "Unauthorized" in str(e):
-            logger.error("=" * 50)
-            logger.error("KAGGLE AUTHENTICATION FAILED!")
-            logger.error("Please place your API token at: ~/.kaggle/kaggle.json")
-            logger.error("Go to: https://www.kaggle.com/settings -> API -> Create New Token")
-            logger.error("=" * 50)
-            raise OSError("Kaggle API Token missing or invalid.") from e
-        else:
-            logger.error(f"Failed to download data: {e}")
-            raise
+    logger.info(f"Download complete. Raw CSVs saved to {target_dir}")
 
 
 if __name__ == "__main__":
-    # For standalone execution
     from src.utils.config import load_config
 
     cfg = load_config()
-    raw_dir = cfg.get_path("data.raw_dir")
-    download_and_extract_data(raw_dir)
+    download_and_extract_data(cfg.get_path("data.raw_dir"))
