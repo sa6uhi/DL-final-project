@@ -1,0 +1,74 @@
+"""
+Master Data Preparation Script for the Fraud Detection Pipeline.
+Run this script to generate all processed .parquet files and the preprocessor pickle.
+
+Usage:
+    python prepare_data.py
+"""
+
+from pathlib import Path
+import pandas as pd
+
+from src.utils.config import load_config
+from src.data.temporal_split import load_and_merge_data, split_temporal
+from src.data.preprocessor import FraudPreprocessor
+from src.data.sequence_extractor import build_historical_sequences
+
+
+def main() -> None:
+    # 1. Load Centralized Configuration
+    cfg = load_config()
+
+    # 2. Setup Output Directories (Create if they don't exist)
+    processed_dir: Path = cfg.get_path("data.processed_dir")
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Saving processed data to: {processed_dir}")
+
+    # 3. Load and Merge Raw Data
+    trans_path = cfg.get_path("data.raw_transaction_path")
+    id_path = cfg.get_path("data.raw_identity_path")
+    df_merged = load_and_merge_data(str(trans_path), str(id_path))
+
+    # 4. Strict Temporal Split (Zero Leakage)
+    print("\n--- Executing Temporal Split ---")
+    train_df, val_df, test_df = split_temporal(df_merged, time_col=cfg.split.time_col)
+
+    # 5. Fit Preprocessor STRICTLY on Train, then transform Val/Test
+    print("\n--- Fitting Preprocessor on Train ---")
+    preprocessor = FraudPreprocessor(
+        cont_cols=cfg.features.continuous_cols,
+        cat_cols=cfg.features.categorical_cols
+    )
+
+    train_df = preprocessor.fit_transform(train_df)
+    val_df = preprocessor.transform(val_df)
+    test_df = preprocessor.transform(test_df)
+
+    # Save preprocessor for Member C to use in the FastAPI serving endpoint later!
+    preprocessor_path = processed_dir / "preprocessor.pkl"
+    preprocessor.save(str(preprocessor_path))
+
+    # 6. Extract Sequences (Run independently on each split to prevent leakage!)
+    print("\n--- Extracting Historical Sequences ---")
+    train_df = build_historical_sequences(
+        train_df,
+        group_cols=cfg.sequence.group_cols,
+        seq_feature_cols=cfg.sequence.feature_cols,
+        k=cfg.sequence.k_window
+    )
+    val_df = build_historical_sequences(val_df, cfg.sequence.group_cols, cfg.sequence.feature_cols,
+                                        cfg.sequence.k_window)
+    test_df = build_historical_sequences(test_df, cfg.sequence.group_cols, cfg.sequence.feature_cols,
+                                         cfg.sequence.k_window)
+
+    # 7. Save Final Artifacts
+    print("\n--- Saving Parquet Files ---")
+    train_df.to_parquet(processed_dir / "train.parquet", index=False)
+    val_df.to_parquet(processed_dir / "val.parquet", index=False)
+    test_df.to_parquet(processed_dir / "test.parquet", index=False)
+
+    print("\n✅ Data preparation complete! Members B, C, and D can now use data/processed/")
+
+
+if __name__ == "__main__":
+    main()
