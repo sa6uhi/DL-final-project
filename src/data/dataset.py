@@ -26,7 +26,7 @@ class TransactionSequenceDataset(Dataset):
     def __len__(self) -> int:
         return len(self.df)
     
-        def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         row = self.df.iloc[idx]
         
         # 1. Current Continuous Features (x_t) - FORCE FLOAT32
