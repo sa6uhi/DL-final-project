@@ -23,7 +23,9 @@ logging:
 # Semi-Supervised Deep Denoising Autoencoder
 # ---------------------------------------------------------------------------
 autoencoder:
-  input_dim: 100
+  # DAE input dimension: 400 continuous features (incl. sequence columns) +
+  # 400 missingness (`_is_nan`) indicators after preprocessing.
+  input_dim: 800
   encoder_hidden_dims: [256, 128]
   latent_dim: 32
   activation: "leaky_relu"
@@ -35,11 +37,11 @@ autoencoder:
   training:
     lr: 1.0e-3
     weight_decay: 1.0e-5
-    epochs: 50
+    epochs: 35
     batch_size: 256
     num_workers: 4
     pin_memory: true
-    early_stopping_patience: 8
+    early_stopping_patience: 6
     min_delta: 1.0e-4
     val_check_interval_epochs: 1
 
@@ -144,6 +146,15 @@ data:
   raw_identity_path: "data/raw/train_identity.csv"
   processed_dir: "data/processed"
   preprocessor_path: "data/processed/preprocessor.pkl"
+  train_data_path: "data/processed/train.parquet"
+  val_data_path: "data/processed/val.parquet"
+  test_data_path: "data/processed/test.parquet"
+  # Columns that are never model features (identifiers, target, sequence tensor).
+  non_feature_cols:
+    - "TransactionID"
+    - "TransactionDT"
+    - "isFraud"
+    - "sequence_array"
 
 split:
   time_col: "TransactionDT"

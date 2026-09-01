@@ -1,18 +1,18 @@
 """Training entry point for the semi-supervised Deep Denoising Autoencoder.
 
 Trains the DAE strictly on legitimate transactions (``y=0``) sourced from the
-processed parquet/npy splits produced by Member A, with early stopping on
-validation reconstruction loss and checkpointing to
-``models/checkpoints/autoencoder.pt``.
+processed parquet splits, with early stopping on validation reconstruction
+loss and checkpointing to ``models/checkpoints/autoencoder.pt``.
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
+import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -258,42 +258,50 @@ def _validate(
     return total / max(count, 1)
 
 
-def _load_feature_matrix(path: str | Path) -> np.ndarray:
-    """Load a feature matrix from a ``.npy`` artifact or lightweight CSV.
+def _load_legit_features(
+    path: str | Path, non_feature_cols: Sequence[str], target_col: str = "isFraud"
+) -> np.ndarray:
+    """Load a feature matrix of legitimate transactions from a parquet split.
+
+    Selects all numeric (continuous) columns except identifiers and the
+    target, then keeps only rows labelled ``isFraud == 0`` since the DAE is
+    trained exclusively on legitimate transactions.
 
     Args:
-        path: Path to the data artifact.
+        path: Path to a processed ``.parquet`` split.
+        non_feature_cols: Columns that are never model features (ids, target,
+            sequence tensor).
+        target_col: Name of the binary fraud label column.
 
     Returns:
-        Feature matrix as an ``numpy.ndarray``.
+        Float32 feature matrix of shape ``(n_legit, n_features)``.
 
     Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If the file format is unsupported.
+        FileNotFoundError: If the parquet file does not exist.
+        ValueError: If no numeric feature columns are found.
     """
     file_path = Path(path)
     if not file_path.is_file():
-        raise FileNotFoundError(f"Feature matrix not found: {file_path}")
-    if file_path.suffix == ".npy":
-        return np.load(file_path)
-    if file_path.suffix == ".csv":
-        return np.loadtxt(file_path, delimiter=",", skiprows=1).astype(np.float32)
-    raise ValueError(f"Unsupported data format: {file_path.suffix}")
+        raise FileNotFoundError(f"Data split not found: {file_path}")
 
+    df = pd.read_parquet(file_path)
+    numeric_cols = [
+        col
+        for col in df.columns
+        if col not in non_feature_cols and df[col].dtype in ("float64", "float32", "int64", "int32")
+    ]
+    if not numeric_cols:
+        raise ValueError(f"No numeric feature columns found in {file_path}")
 
-def _synthetic_legit_matrix(n_samples: int, n_features: int, seed: int) -> np.ndarray:
-    """Generate a mock legitimate-feature matrix for smoke runs.
-
-    Args:
-        n_samples: Number of synthetic samples.
-        n_features: Feature dimensionality.
-        seed: Random seed for reproducibility.
-
-    Returns:
-        Deterministic synthetic feature matrix.
-    """
-    rng = np.random.default_rng(seed)
-    return rng.standard_normal((n_samples, n_features)).astype(np.float32)
+    legit = df[df[target_col] == 0]
+    features = legit[numeric_cols].to_numpy(dtype=np.float32)
+    logger.info(
+        "Loaded %d legit transactions with %d features from %s",
+        features.shape[0],
+        features.shape[1],
+        file_path,
+    )
+    return features
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -304,9 +312,9 @@ def main(argv: list[str] | None = None) -> None:
     """
     parser = argparse.ArgumentParser(description="Train the Deep DAE autoencoder on legit data")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG))
-    parser.add_argument("--train-data", type=str, default=None, help="npy/csv of legit features")
+    parser.add_argument("--train-data", type=str, default=None, help="parquet of legit features")
     parser.add_argument(
-        "--val-data", type=str, default=None, help="optional npy/csv of legit features"
+        "--val-data", type=str, default=None, help="optional parquet of legit features"
     )
     parser.add_argument("--out", type=str, default=str(DEFAULT_CHECKPOINT))
     parser.add_argument("--device", type=str, default="cpu")
@@ -318,19 +326,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     seed_everything(int(config.seed))
 
-    train_x = (
-        _load_feature_matrix(args.train_data)
-        if args.train_data
-        else _synthetic_legit_matrix(
-            n_samples=2000, n_features=int(config.autoencoder.input_dim), seed=int(config.seed)
-        )
-    )
-    val_x = _load_feature_matrix(args.val_data) if args.val_data else None
-    if args.train_data is None:
-        logger.warning(
-            "No train data provided; using seeded synthetic matrix (2000 x %d)",
-            int(config.autoencoder.input_dim),
-        )
+    non_feature_cols = list(config.data.non_feature_cols)
+    train_path = args.train_data or config.get_path("data.train_data_path")
+    val_path = args.val_data or config.get_path("data.val_data_path")
+
+    train_x = _load_legit_features(train_path, non_feature_cols)
+    val_x = _load_legit_features(val_path, non_feature_cols)
     train_autoencoder(train_x, config, val_x, out_path=args.out, device=args.device)
 
 
