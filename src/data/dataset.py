@@ -26,25 +26,27 @@ class TransactionSequenceDataset(Dataset):
     def __len__(self) -> int:
         return len(self.df)
     
-    def __getitem__(self,idx:int)->Tuple[torch.Tensor,torch.Tensor,torch.Tensor,torch.Tensor]:
-        row=self.df.iloc[idx]
-
-        # 1. Current Continuous Features (x_t)
-        x_cont=torch.tensor(row[self.cont_cols].values,dtype=torch.float32)
-
-        # 2. Current Categorical Features (x_t)
-        x_cat=torch.tensor(row[self.cat_cols].values,dtype=torch.long)
-
-        # 3. Historical Sequence Tensor S_t in R^{K x D}
-        seq_array=np.vstack(row['sequence_array']) # Shape: (5, num_features)
-
-        # Extract only the specific continuous/categorical features needed for the sequence
-        S_t=torch.tensor(seq_array,dtype=torch.float32)
-
+        def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        row = self.df.iloc[idx]
+        
+        # 1. Current Continuous Features (x_t) - FORCE FLOAT32
+        x_cont = torch.tensor(
+            row[self.cont_cols].to_numpy(dtype=np.float32)
+        )
+        
+        # 2. Current Categorical Features (x_t) - FORCE INT64
+        x_cat = torch.tensor(
+            row[self.cat_cols].to_numpy(dtype=np.int64)
+        )
+        
+        # 3. Historical Sequence Tensor S_t in R^{K x D} - FORCE FLOAT32
+        seq_array = np.vstack(row['sequence_array']) 
+        S_t = torch.tensor(seq_array, dtype=torch.float32)
+        
         # 4. Label
-        y=torch.tensor(row[self.label_col],dtype=torch.float32)
-
-        return x_cont,x_cat,S_t,y
+        y = torch.tensor(row[self.label_col], dtype=torch.float32)
+        
+        return x_cont, x_cat, S_t, y
 
 def get_dataloaders(train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame,
                     cont_cols: list, cat_cols: list, seq_cols: list, batch_size: int = 1024) -> Tuple[DataLoader, DataLoader, DataLoader]:
