@@ -16,51 +16,60 @@ class FraudPreprocessor:
         self.scaler = RobustScaler()
         self.cat_vocabularies: Dict[str, Dict[Any, int]] = {}
 
-    def fit_transform(self,df:pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """Fits scalers and vocabularies strictly on the training set."""
         logger.info("Fitting preprocessor on training data...")
         df_processed = df.copy()
-
-        # 1. Continuous Features: Log transform (skewness) + RobustScaler
-        for col in self.cont_cols:
-            # Log transform to handle heavy skew
-            df_processed[col]=np.log1p(df_processed[col].fillna(0))
-
-            # Create missingness indicator
-            df_processed[f"{col}_is_nan"]=df_processed[col].isna().astype(int)
-
-        # Fit and transform scaler only on continuous cols
-        scaled_data=self.scaler.fit_transform(df_processed[self.cont_cols].fillna(0))
-        df_processed[self.cont_cols]=scaled_data
-
+        
+        # 1. Continuous Features: Handle NaNs and Log transform
+        # Create all missingness indicators AT ONCE (fixes the fragmentation warning)
+        nan_indicators = df_processed[self.cont_cols].isna().astype(int)
+        nan_indicators.columns = [f"{col}_is_nan" for col in self.cont_cols]
+        
+        # Fill NaNs with 0 for math operations
+        df_processed[self.cont_cols] = df_processed[self.cont_cols].fillna(0)
+        
+        # Log transform. Clip negatives to 0 to avoid the "invalid value in log1p" warning
+        df_processed[self.cont_cols] = np.log1p(df_processed[self.cont_cols].clip(lower=0))
+        
+        # Fit and transform scaler
+        scaled_data = self.scaler.fit_transform(df_processed[self.cont_cols])
+        df_processed[self.cont_cols] = scaled_data
+        
+        # Add all 390 NaN indicator columns in ONE fast operation
+        df_processed = pd.concat([df_processed, nan_indicators], axis=1)
+        
         # 2. Categorical Features: Build vocab & map to ints
         for col in self.cat_cols:
-            # Fill NaNs with a specific string so it gets its own token
-            df_processed[col]=df_processed[col].fillna("MISSING")
-            unique_cats=df_processed[col].unique()
-            # Create vocabulary: {cat: idx}. Reserve 0 for <UNK> seen in test/val
-            self.cat_vocabularies[col]={cat:idx+1 for idx,cat in enumerate(unique_cats)}
-            df_processed[col]=df_processed[col].map(self.cat_vocabularies[col])
-
+            df_processed[col] = df_processed[col].fillna("MISSING")
+            unique_cats = df_processed[col].unique()
+            self.cat_vocabularies[col] = {cat: idx + 1 for idx, cat in enumerate(unique_cats)}
+            df_processed[col] = df_processed[col].map(self.cat_vocabularies[col])
+            
         return df_processed
 
-    def transform(self,df:pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """Transforms validation/test data. Maps unseen categories to <UNK> (0)."""
         logger.info("Transforming data using fitted preprocessor...")
         df_processed = df.copy()
-
-        for col in self.cont_cols:
-            df_processed[col] = np.log1p(df_processed[col].fillna(0))
-            df_processed[f"{col}_is_nan"] = df_processed[col].isna().astype(int)
-
-        scaled_data=self.scaler.transform(df_processed[self.cont_cols].fillna(0))
-        df_processed[self.cont_cols]=scaled_data
-
+        
+        # Fast vectorized continuous transform
+        nan_indicators = df_processed[self.cont_cols].isna().astype(int)
+        nan_indicators.columns = [f"{col}_is_nan" for col in self.cont_cols]
+        
+        df_processed[self.cont_cols] = df_processed[self.cont_cols].fillna(0)
+        df_processed[self.cont_cols] = np.log1p(df_processed[self.cont_cols].clip(lower=0))
+        
+        scaled_data = self.scaler.transform(df_processed[self.cont_cols])
+        df_processed[self.cont_cols] = scaled_data
+        
+        df_processed = pd.concat([df_processed, nan_indicators], axis=1)
+        
+        # Categorical transform
         for col in self.cat_cols:
-            df_processed[col]=df_processed[col].fillna("MISSING")
-            # Map to vocab, defaulting to 0 (<UNK>) if not seen during fit
+            df_processed[col] = df_processed[col].fillna("MISSING")
             df_processed[col] = df_processed[col].map(self.cat_vocabularies[col]).fillna(0).astype(int)
-
+            
         return df_processed
 
     def save(self,path:str)->None:
