@@ -25,6 +25,8 @@ Train, serialize, benchmark, and verify the whole pipeline:
 Or run steps individually:
 
 ```bash
+python -m src.data.download_data                                              # download raw IEEE-CIS CSVs (mirror)
+python -m src.data.prepare_data                                               # preprocess + temporal split (70/15/15)
 python src/training/train_autoencoder.py --config config/config.yaml   # train DAE
 python src/serving/model_serializer.py --input models/checkpoints/ --output models/artifacts/  # EXIR + ONNX
 python src/evaluation/latency_benchmark.py --config config/config.yaml # latency benchmark
