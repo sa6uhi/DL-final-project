@@ -1,16 +1,21 @@
 # Runtime + tooling freeze. CPU-only PyTorch (multi-GB CUDA wheels only add
-# CI time). Pipeline extras live in requirements-ci.txt.
+# CI time). scikit-learn backs src/data/preprocessor.py; matplotlib backs the
+# experiment figures under figures/. Pipeline extras live in requirements-ci.txt.
 --extra-index-url https://download.pytorch.org/whl/cpu
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2
 black==26.5.1
 click==8.5.0
+cloudpickle==3.1.2
+contourpy==1.3.3
 coverage==7.16.0
+cycler==0.12.1
 fastapi==0.141.1
 filelock==3.32.3
 flake8==7.3.0
 flatbuffers==25.12.19
+fonttools==4.64.0
 fsspec==2026.7.0
 h11==0.16.0
 httpcore2==2.12.0
@@ -20,10 +25,14 @@ idna==3.19
 iniconfig==2.3.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
+joblib==1.6.0
+kiwisolver==1.5.1
+matplotlib==3.11.1
 mccabe==0.7.0
 ml_dtypes==0.6.0
 mpmath==1.3.0
 mypy_extensions==1.1.0
+narwhals==2.25.0
 networkx==3.6.1
 numpy==2.5.2
 onnx==1.22.0
@@ -33,6 +42,7 @@ onnxscript==0.7.1
 packaging==26.3
 pandas==3.0.5
 pathspec==1.1.1
+pillow==12.3.0
 platformdirs==4.11.5
 pluggy==1.6.0
 protobuf==7.36.0
@@ -42,15 +52,19 @@ pydantic==2.13.5
 pydantic_core==2.46.5
 pyflakes==3.4.0
 Pygments==2.21.0
+pyparsing==3.3.2
 pytest==9.1.1
 pytest-cov==7.1.0
 python-dotenv==1.2.3
 python-dateutil==2.9.0.post0
 pytokens==0.4.1
 PyYAML==6.0.3
+scikit-learn==1.9.0
+scipy==1.18.1
 setuptools==78.1.0
 starlette==1.6.0
 sympy==1.14.0
+threadpoolctl==3.6.0
 torch==2.13.0+cpu
 truststore==0.10.4
 typing-inspection==0.4.4
