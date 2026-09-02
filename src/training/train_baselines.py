@@ -9,7 +9,7 @@ from typing import Dict
 
 from src.utils.config import load_config
 from src.models.baselines import get_baselines
-from src.evaluation.metrics import evaluate_fraud_metrics
+from src.evaluation.metrics_a import evaluate_fraud_metrics
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
