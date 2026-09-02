@@ -3,10 +3,9 @@ Training script for Classical ML Baselines.
 """
 
 import pandas as pd
-import numpy as np
 import pickle
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict,
 
 from src.utils.config import load_config
 from src.models.baselines import get_baselines
