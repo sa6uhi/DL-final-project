@@ -23,9 +23,7 @@ logging:
 # Semi-Supervised Deep Denoising Autoencoder
 # ---------------------------------------------------------------------------
 autoencoder:
-  # DAE input dimension: 400 continuous features (incl. sequence columns) +
-  # 400 missingness (`_is_nan`) indicators after preprocessing.
-  input_dim: 800
+  input_dim: 831
   encoder_hidden_dims: [256, 128]
   latent_dim: 32
   activation: "leaky_relu"
@@ -66,8 +64,51 @@ transformer:
   norm_first: true
   seq_len: 5
   n_continuous: 100
-  categorical_cardinalities: []
+  categorical_cardinalities:
+    - 6     # ProductCD
+    - 6     # card4
+    - 6     # card6
+    - 61    # P_emaildomain
+    - 62    # R_emaildomain
+    - 4     # M1
+    - 4     # M2
+    - 4     # M3
+    - 5     # M4
+    - 4     # M5
+    - 4     # M6
+    - 4     # M7
+    - 4     # M8
+    - 4     # M9
+    - 4     # id_12
+    - 5     # id_15
+    - 4     # id_16
+    - 5     # id_23
+    - 4     # id_27
+    - 4     # id_28
+    - 4     # id_29
+    - 73    # id_30
+    - 110   # id_31
+    - 185   # id_33
+    - 6     # id_34
+    - 4     # id_35
+    - 4     # id_36
+    - 4     # id_37
+    - 4     # id_38
+    - 4     # DeviceType
+    - 1548  # DeviceInfo
   use_cross_attention: true
+
+  # Feature contract 
+  feature_cache_path: "data/processed/ft_cat_features.json"
+  feature_selection:
+    top_n_continuous: 100
+    mi_sample_size: 50000
+
+  # Exp-3 and Exp-4 together are ~25 training runs; both sweep on a
+  # class-proportional subsample to stay inside the CPU compute envelope.
+  subsample:
+    train_rows: 80000
+    val_rows: 20000
 
   training:
     lr: 3.0e-4

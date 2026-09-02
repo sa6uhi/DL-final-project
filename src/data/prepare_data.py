@@ -8,6 +8,8 @@ Usage:
 
 from pathlib import Path
 
+import pandas as pd
+
 from src.utils.config import load_config
 from src.data.temporal_split import load_and_merge_data, split_temporal
 from src.data.preprocessor import FraudPreprocessor
@@ -36,7 +38,8 @@ def main() -> None:
 
     base_features = [c for c in train_df.columns if c not in id_cols + [target_col]]
     cont_cols = [c for c in base_features if train_df[c].dtype in ["float64", "int64"]]
-    cat_cols = [c for c in base_features if train_df[c].dtype == "object"]
+    # pandas >= 3.0 reads text columns as the `str` dtype rather than `object`,
+    cat_cols = [c for c in base_features if pd.api.types.is_string_dtype(train_df[c])]
 
     logger.info("Found %d continuous features.", len(cont_cols))
     logger.info("Found %d categorical features.", len(cat_cols))
