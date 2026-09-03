@@ -9,6 +9,7 @@ import torch
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
 from src.training.train_hybrid_gating import load_checkpoint, save_checkpoint
 
+
 # Test functions
 def test_checkpoint_roundtrip(tmp_path: Path) -> None:
     """Saved and restored gate should produce identical predictions."""

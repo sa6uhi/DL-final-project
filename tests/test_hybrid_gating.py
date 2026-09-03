@@ -195,10 +195,7 @@ def test_learned_gate_gradient_flows(
     output = learned_gate(feature_batch)
     output.sum().backward()
 
-    assert all(
-        parameter.grad is not None
-        for parameter in learned_gate.parameters()
-    )
+    assert all(parameter.grad is not None for parameter in learned_gate.parameters())
 
 
 def test_learned_gate_wrong_ndim_raises(
@@ -311,5 +308,3 @@ def test_learned_gate_eval_mode_is_deterministic(
     second_output = learned_gate(feature_batch)
 
     assert torch.allclose(first_output, second_output)
-
-    

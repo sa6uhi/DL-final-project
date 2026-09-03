@@ -236,19 +236,13 @@ class LearnedHybridGate(nn.Module):
             ValueError: If the input tensor has an invalid shape or non-finite values.
         """
         if features.ndim != 2:
-            raise ValueError(
-                f"features must be 2D, got shape {tuple(features.shape)}"
-            )
+            raise ValueError(f"features must be 2D, got shape {tuple(features.shape)}")
 
         if features.shape[1] != self.input_dim:
-            raise ValueError(
-                f"Expected {self.input_dim} input features, got {features.shape[1]}"
-            )
+            raise ValueError(f"Expected {self.input_dim} input features, got {features.shape[1]}")
 
         if not torch.isfinite(features).all():
             raise ValueError("features must contain only finite values")
 
         logits = self.network(features)
         return torch.sigmoid(logits).squeeze(-1)
-    
-    

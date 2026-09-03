@@ -6,18 +6,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import torch
-from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
 
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
-from src.utils.config import Config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 DEFAULT_CHECKPOINT = Path("models/checkpoints/hybrid_gating.pt")
+
 
 def save_checkpoint(
     model: LearnedHybridGate,
@@ -36,16 +33,17 @@ def save_checkpoint(
 
     payload: dict[str, Any] = {
         "state_dict": model.state_dict(),
-    "meta": {
-        "input_dim": model.input_dim,
-        "hidden_dims": model.hidden_dims,
-        "dropout": model.dropout,
-    },
+        "meta": {
+            "input_dim": model.input_dim,
+            "hidden_dims": model.hidden_dims,
+            "dropout": model.dropout,
+        },
         "normalizer": normalizer.state_dict(),
     }
 
     torch.save(payload, out)
     logger.info("Saved learned hybrid gate checkpoint to %s", out)
+
 
 def load_checkpoint(
     path: str | Path,
