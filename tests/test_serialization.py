@@ -155,13 +155,12 @@ def test_reference_anomaly_score_reductions(
     ref_model: ReferenceEncoder, sample_batch: torch.Tensor
 ) -> None:
     """mean/sum reductions aggregate the per-sample reference scores."""
-    scores = ref_model.anomaly_score(sample_batch)
-    assert float(ref_model.anomaly_score(sample_batch, reduction="mean")) == pytest.approx(
-        float(scores.mean())
-    )
-    assert float(ref_model.anomaly_score(sample_batch, reduction="sum")) == pytest.approx(
-        float(scores.sum())
-    )
+    with torch.no_grad():
+        scores = ref_model.anomaly_score(sample_batch)
+        mean_score = ref_model.anomaly_score(sample_batch, reduction="mean")
+        sum_score = ref_model.anomaly_score(sample_batch, reduction="sum")
+    assert float(mean_score) == pytest.approx(float(scores.mean()))
+    assert float(sum_score) == pytest.approx(float(scores.sum()))
 
 
 def test_resolve_model_prefers_trained_checkpoint(tmp_path: Path) -> None:

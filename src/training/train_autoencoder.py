@@ -93,6 +93,27 @@ def load_checkpoint(path: str | Path, device: str = "cpu") -> DenoisingAutoencod
     return model
 
 
+def _to_tensor(matrix: np.ndarray | torch.Tensor) -> torch.Tensor:
+    """Convert a feature matrix to a float32 tensor without read-only memory.
+
+    ``torch.from_numpy`` shares memory with the source array, so read-only
+    inputs (e.g. pandas block views) trigger a runtime warning about
+    undefined write behavior. Copy only when the array is not writable.
+
+    Args:
+        matrix: Feature matrix as a NumPy array or torch tensor.
+
+    Returns:
+        Float32 tensor safe for training.
+    """
+    if isinstance(matrix, torch.Tensor):
+        return matrix.float()
+    array = np.asarray(matrix, dtype=np.float32)
+    if not array.flags.writeable:
+        array = array.copy()
+    return torch.from_numpy(array)
+
+
 def train_autoencoder(
     train_x: np.ndarray | torch.Tensor,
     config: Config,
@@ -120,17 +141,12 @@ def train_autoencoder(
     """
     acfg = config.autoencoder
 
-    if isinstance(train_x, torch.Tensor):
-        train_tensor = train_x.float()
-    else:
-        train_tensor = torch.from_numpy(np.asarray(train_x, dtype=np.float32))
+    train_tensor = _to_tensor(train_x)
     if train_tensor.dim() != 2 or train_tensor.size(0) == 0:
         raise ValueError(f"train_x must be a non-empty 2D array, got {tuple(train_tensor.shape)}")
 
-    if isinstance(val_x, torch.Tensor):
-        val_tensor = val_x.float()
-    elif val_x is not None:
-        val_tensor = torch.from_numpy(np.asarray(val_x, dtype=np.float32))
+    if val_x is not None:
+        val_tensor = _to_tensor(val_x)
     else:
         n_val = max(1, int(train_tensor.size(0) * 0.1))
         train_tensor, val_tensor = train_tensor[:-n_val], train_tensor[-n_val:]
