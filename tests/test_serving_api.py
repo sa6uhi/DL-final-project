@@ -355,3 +355,56 @@ def test_explain_shap_exception_falls_back_to_dae(
     body = response.json()
     assert body["method"] == "dae_reconstruction_residual"
     assert len(body["top_drivers"]) == 2
+
+
+def test_scorer_score_rejects_nan_directly(client: TestClient) -> None:
+    """Scorer.score raises ValueError on NaN features."""
+    scorer = client.app.state.scorer
+    with pytest.raises(ValueError, match="finite"):
+        scorer.score([float("nan")] * scorer.input_dim)
+
+
+def test_scorer_score_batch_rejects_empty_directly(client: TestClient) -> None:
+    """Scorer.score_batch raises ValueError on empty list."""
+    scorer = client.app.state.scorer
+    with pytest.raises(ValueError, match="empty"):
+        scorer.score_batch([])
+
+
+def test_scorer_score_batch_rejects_nan_directly(client: TestClient) -> None:
+    """Scorer.score_batch raises ValueError on NaN features."""
+    scorer = client.app.state.scorer
+    with pytest.raises(ValueError, match="finite"):
+        scorer.score_batch([[float("nan")] * scorer.input_dim])
+
+
+def test_serving_require_checkpoint_raises_when_missing(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """build_scorer raises FileNotFoundError when SERVING_REQUIRE_CHECKPOINT is set."""
+    from src.serving.api import build_scorer
+
+    cfg = Config(
+        {
+            "autoencoder": {"input_dim": 20, "anomaly_score": {"l1_gamma": 0.4}},
+            "serving": {"model_path": str(tmp_path / "absent.pt"), "anomaly_const": 2.0},
+            "scoring": {
+                "approve_threshold": 0.1,
+                "block_threshold": 0.9,
+                "escalate_threshold": 0.5,
+            },
+        }
+    )
+    monkeypatch.setenv("SERVING_REQUIRE_CHECKPOINT", "1")
+    with pytest.raises(FileNotFoundError, match="SERVING_REQUIRE_CHECKPOINT"):
+        build_scorer(cfg)
+
+
+def test_metrics_p99_matches_numpy(client: TestClient) -> None:
+    """Metrics P99 uses numpy.percentile calculation."""
+    client.app.state.latencies = [1.0, 2.0, 3.0, 10.0, 100.0]
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    data = response.json()
+    expected_p99 = float(np.percentile([1.0, 2.0, 3.0, 10.0, 100.0], 99))
+    assert data["p99_latency_ms"] == pytest.approx(expected_p99)
