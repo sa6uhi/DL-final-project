@@ -44,7 +44,12 @@ def main() -> None:
     X_train = X_train.fillna(0)
     X_val = X_val.fillna(0)
 
-    logger.info(f"Training data shape: {X_train.shape}")
+    # Drop the *_is_nan indicator columns to save massive amounts of RAM
+    is_nan_cols = [c for c in X_train.columns if c.endswith('_is_nan')]
+    X_train = X_train.drop(columns=is_nan_cols)
+    X_val = X_val.drop(columns=is_nan_cols)
+    
+    logger.info(f"Dropped {len(is_nan_cols)} NaN indicator columns. New shape: {X_train.shape}")
 
     # 3. Get Models
     models = get_baselines(y_train)
