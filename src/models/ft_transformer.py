@@ -260,7 +260,6 @@ class FTCATransformer(nn.Module):
             norm_first=norm_first,
             batch_first=True,
         )
-        
         self.encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=n_layers, enable_nested_tensor=False
         )
