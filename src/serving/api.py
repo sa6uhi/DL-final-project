@@ -310,29 +310,38 @@ class Scorer:
         """
         if len(features) != self.input_dim:
             raise ValueError(f"Expected {self.input_dim} features, got {len(features)}")
+        has_shap = False
         try:
             from src.explainability.shap_explainer import explain_transaction  # type: ignore
 
-            drivers = explain_transaction(features, top_k=top_k, ft_probability=ft_probability)
-            return {"top_drivers": drivers, "method": "shap"}
+            has_shap = True
         except ImportError, AttributeError:
-            x = torch.as_tensor(np.asarray([features], dtype=np.float32))
-            with torch.no_grad():
-                if hasattr(self.model, "decode") and hasattr(self.model, "encode"):
-                    x_hat = self.model(x)
-                    residuals = (x - x_hat).abs().squeeze(0).cpu().numpy()
-                else:
-                    residuals = np.abs(np.asarray(features))
-            top_indices = np.argsort(residuals)[::-1][:top_k]
-            drivers = [
-                {
-                    "feature_name": f"feature_{idx}",
-                    "attribution": float(residuals[idx]),
-                    "value": float(features[idx]),
-                }
-                for idx in top_indices
-            ]
-            return {"top_drivers": drivers, "method": "dae_reconstruction_residual"}
+            pass
+
+        if has_shap:
+            try:
+                drivers = explain_transaction(features, top_k=top_k, ft_probability=ft_probability)
+                return {"top_drivers": drivers, "method": "shap"}
+            except Exception as exc:
+                logger.warning("SHAP explanation failed, falling back to DAE residuals: %s", exc)
+
+        x = torch.as_tensor(np.asarray([features], dtype=np.float32))
+        with torch.no_grad():
+            if hasattr(self.model, "decode") and hasattr(self.model, "encode"):
+                x_hat = self.model(x)
+                residuals = (x - x_hat).abs().squeeze(0).cpu().numpy()
+            else:
+                residuals = np.abs(np.asarray(features))
+        top_indices = np.argsort(residuals)[::-1][:top_k]
+        drivers = [
+            {
+                "feature_name": f"feature_{idx}",
+                "attribution": float(residuals[idx]),
+                "value": float(features[idx]),
+            }
+            for idx in top_indices
+        ]
+        return {"top_drivers": drivers, "method": "dae_reconstruction_residual"}
 
 
 def create_app(config: Config | None = None) -> FastAPI:

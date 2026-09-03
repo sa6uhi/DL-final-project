@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -331,3 +333,25 @@ def test_explain_delegates_to_shap_when_available(
     assert body["method"] == "shap"
     assert body["top_drivers"][0]["feature_name"] == "Amount"
     assert body["top_drivers"][0]["attribution"] == 0.42
+
+
+def test_explain_shap_exception_falls_back_to_dae(
+    client: TestClient, features: list[float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If shap_explainer raises an exception, /explain falls back gracefully."""
+    import sys
+    import types
+
+    fake_mod = types.ModuleType("src.explainability.shap_explainer")
+
+    def faulty_explainer(*args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        raise TypeError("Unexpected signature")
+
+    fake_mod.explain_transaction = faulty_explainer  # type: ignore
+    monkeypatch.setitem(sys.modules, "src.explainability.shap_explainer", fake_mod)
+
+    response = client.post("/explain", json={"features": features, "top_k": 2})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["method"] == "dae_reconstruction_residual"
+    assert len(body["top_drivers"]) == 2

@@ -180,7 +180,7 @@ def test_latency_main_writes_report(tmp_path: Path) -> None:
     assert (out_dir / "latency_table.csv").exists()
 
 
-def test_latency_main_with_checkpoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_latency_main_with_checkpoint(tmp_path: Path) -> None:
     """latency main() benchmarks trained checkpoint when present."""
     from src.evaluation.latency_benchmark import main
     from src.models.autoencoder import DenoisingAutoencoder
@@ -198,11 +198,14 @@ def test_latency_main_with_checkpoint(tmp_path: Path, monkeypatch: pytest.Monkey
         tmp_path,
         {
             "evaluation": {"latency": {"batch_sizes": [1], "n_warmup": 1, "n_runs": 2}},
-            "autoencoder": {"input_dim": 8},
-            "paths": {"experiments": str(tmp_path)},
+            "autoencoder": {"input_dim": 8, "latent_dim": 2},
+            "paths": {
+                "checkpoints": str(ckpt_dir),
+                "artifacts": str(ckpt_dir),
+                "experiments": str(tmp_path),
+            },
         },
     )
-    monkeypatch.chdir(tmp_path)
     out_dir = tmp_path / "latency_out_ckpt"
     main(["--config", config_path, "--output-dir", str(out_dir)])
     assert (out_dir / "latency_summary.json").exists()
