@@ -139,8 +139,6 @@ class Config(dict):
         for segment in key.split("."):
             if isinstance(result, dict) and segment in result:
                 result = result[segment]
-            elif isinstance(result, Config) and segment in result:
-                result = result[segment]
             else:
                 return default
         return result
