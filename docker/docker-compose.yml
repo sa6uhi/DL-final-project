@@ -4,6 +4,7 @@
 
 services:
   api:
+    image: ghcr.io/sa6uhi/dl-final-project-api:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile.infer
@@ -25,6 +26,7 @@ services:
 
   train:
     profiles: ["train"]
+    image: ghcr.io/sa6uhi/dl-final-project-train:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile.train
