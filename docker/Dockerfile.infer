@@ -12,11 +12,11 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 WORKDIR /build
 
 # Layer-cache friendly: requirements first, source last.
-COPY requirements.txt ./
+COPY requirements-prod.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip --quiet \
-    && /opt/venv/bin/pip install --quiet -r requirements.txt
+    && /opt/venv/bin/pip install --quiet -r requirements-prod.txt
 
 FROM python:3.14-slim AS runtime
 
