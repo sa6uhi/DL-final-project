@@ -130,3 +130,55 @@ def test_write_eval_report(tmp_path: Path) -> None:
     csv_path = write_eval_report(split_metrics, sweep, tmp_path)
     assert csv_path.exists()
     assert (tmp_path / "anomaly_eval.json").exists()
+
+
+def _tiny_eval_config(tmp_path: Path, payload: dict) -> str:
+    """Write a minimal eval yaml config and return its path."""
+    import yaml
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    return str(config_file)
+
+
+def test_latency_main_writes_report(tmp_path: Path) -> None:
+    """latency main() benchmarks the reference model and writes artifacts."""
+    from src.evaluation.latency_benchmark import main
+
+    config_path = _tiny_eval_config(
+        tmp_path,
+        {
+            "evaluation": {"latency": {"batch_sizes": [1], "n_warmup": 1, "n_runs": 2}},
+            "autoencoder": {"input_dim": 8},
+            "paths": {"experiments": str(tmp_path)},
+        },
+    )
+    out_dir = tmp_path / "latency_out"
+    main(["--config", config_path, "--output-dir", str(out_dir)])
+    assert (out_dir / "latency_summary.json").exists()
+    assert (out_dir / "latency_table.csv").exists()
+
+
+def test_anomaly_eval_main_writes_report(tmp_path: Path) -> None:
+    """anomaly main() scores a tiny npz archive and writes artifacts."""
+    from src.evaluation.dae_anomaly_eval import main
+
+    archive = tmp_path / "scores.npz"
+    np.savez(
+        archive,
+        calibration_scores=np.array([0.1, 0.2, 0.15, 0.3]),
+        eval_scores=np.array([0.1, 0.2, 5.0, 6.0, 0.3, 7.0]),
+        probabilities_ft=np.array([0.05, 0.06, 0.9, 0.95, 0.07, 0.92]),
+        labels=np.array([0, 0, 1, 1, 0, 1]),
+    )
+    config_path = _tiny_eval_config(
+        tmp_path,
+        {
+            "evaluation": {"anomaly_eval": {"max_fpr": 0.5, "alpha_sweep": [0.0, 1.0]}},
+            "autoencoder": {"anomaly_score": {"normalize_percentile": 99.0}},
+            "paths": {"experiments": str(tmp_path)},
+        },
+    )
+    out_dir = tmp_path / "anomaly_out"
+    main(["--config", config_path, "--archive", str(archive), "--output-dir", str(out_dir)])
+    assert (out_dir / "anomaly_eval.json").exists()
