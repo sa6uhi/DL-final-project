@@ -24,3 +24,9 @@ filterwarnings = [
     "error::DeprecationWarning",
     "ignore::FutureWarning:copyreg",
 ]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

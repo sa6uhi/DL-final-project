@@ -184,6 +184,7 @@ def test_latency_main_with_checkpoint(tmp_path: Path, monkeypatch: pytest.Monkey
     """latency main() benchmarks trained checkpoint when present."""
     from src.evaluation.latency_benchmark import main
     from src.models.autoencoder import DenoisingAutoencoder
+    from src.serving.model_serializer import ScoreModule, export_onnx
     from src.training.train_autoencoder import save_checkpoint
 
     model = DenoisingAutoencoder(input_dim=8, encoder_hidden_dims=[4], latent_dim=2)
@@ -191,6 +192,7 @@ def test_latency_main_with_checkpoint(tmp_path: Path, monkeypatch: pytest.Monkey
     ckpt_dir = tmp_path / "models/checkpoints"
     ckpt_dir.mkdir(parents=True)
     save_checkpoint(model, ckpt_dir / "autoencoder.pt")
+    export_onnx(ScoreModule(model), ckpt_dir / "autoencoder.onnx", torch.randn(2, 8))
 
     config_path = _tiny_eval_config(
         tmp_path,
