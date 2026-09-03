@@ -194,9 +194,7 @@ def test_predict_without_gate_ignores_ft_probability(
     client: TestClient, features: list[float]
 ) -> None:
     """DAE-only /predict accepts ft_probability but does not fuse it."""
-    body = client.post(
-        "/predict", json={"features": features, "ft_probability": 0.9}
-    ).json()
+    body = client.post("/predict", json={"features": features, "ft_probability": 0.9}).json()
     assert body["gate_used"] is False
     assert client.get("/health").json()["gate_loaded"] is False
 

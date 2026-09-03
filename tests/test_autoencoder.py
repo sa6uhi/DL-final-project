@@ -14,6 +14,7 @@ from src.training.train_autoencoder import (
     save_checkpoint,
     train_autoencoder,
 )
+from src.utils.config import Config
 
 torch.backends.cudnn.deterministic = True
 
@@ -34,8 +35,6 @@ def ae(config) -> DenoisingAutoencoder:
 @pytest.fixture()
 def config_small(tmp_path):
     """Minimal config overriding the DAE to tiny architecture and 2 epochs."""
-    from src.utils.config import Config
-
     cfg = Config(
         {
             "autoencoder": {
@@ -313,8 +312,6 @@ def test_train_reduces_loss(config_small, tmp_path: Path) -> None:
 
 def _tiny_train_config(tmp_path: Path, **training_overrides: float | int) -> Config:
     """Build a minimal CPU training config with overridable training knobs."""
-    from src.utils.config import Config
-
     training = {
         "lr": 1.0e-3,
         "weight_decay": 1.0e-5,
@@ -397,9 +394,9 @@ def test_train_empty_val_falls_back_to_train_sample(tmp_path: Path) -> None:
 
 
 def test_train_early_stopping_breaks(tmp_path: Path) -> None:
-    """Zero learning rate stalls validation and triggers the early-stop break."""
+    """An impossible min_delta stalls validation and triggers the early-stop break."""
     torch.manual_seed(3)
-    cfg = _tiny_train_config(tmp_path, lr=0.0, epochs=5, early_stopping_patience=1)
+    cfg = _tiny_train_config(tmp_path, epochs=5, early_stopping_patience=1, min_delta=1.0)
     rng = np.random.default_rng(3)
     train_x = rng.standard_normal((32, 8)).astype(np.float32)
     val_x = rng.standard_normal((8, 8)).astype(np.float32)
@@ -416,9 +413,12 @@ def test_invalid_feature_dropout_prob_raises() -> None:
 
 def test_main_trains_from_parquet_cli(tmp_path: Path) -> None:
     """main() trains end-to-end from tiny parquet splits and a yaml config."""
+    import logging
+
     import pandas as pd
     import yaml
 
+    import src.utils.logger as logger_module
     from src.training.train_autoencoder import main
 
     rng = np.random.default_rng(7)
@@ -465,7 +465,18 @@ def test_main_trains_from_parquet_cli(tmp_path: Path) -> None:
     config_file.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
     out = tmp_path / "cli.pt"
 
-    main(["--config", str(config_file), "--out", str(out), "--device", "cpu"])
+    root_logger = logging.getLogger()
+    prev_handlers = list(root_logger.handlers)
+    prev_configured = logger_module._configured
+    logger_module._configured = False
+    try:
+        main(["--config", str(config_file), "--out", str(out), "--device", "cpu"])
+    finally:
+        for handler in list(root_logger.handlers):
+            if handler not in prev_handlers:
+                root_logger.removeHandler(handler)
+                handler.close()
+        logger_module._configured = prev_configured
 
     assert out.is_file()
     reloaded = load_checkpoint(out)

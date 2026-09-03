@@ -181,6 +181,4 @@ def test_resolve_model_prefers_trained_checkpoint(tmp_path: Path) -> None:
 
     assert source == input_dir / "autoencoder.pt"
     sample = torch.randn(2, 8)
-    assert torch.allclose(
-        resolved.anomaly_score(sample), model.anomaly_score(sample), atol=1e-6
-    )
+    assert torch.allclose(resolved.anomaly_score(sample), model.anomaly_score(sample), atol=1e-6)
