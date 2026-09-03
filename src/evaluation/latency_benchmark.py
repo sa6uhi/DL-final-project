@@ -166,7 +166,9 @@ def main(argv: list[str] | None = None) -> None:
     n_warmup = int(latency_cfg["n_warmup"])
     n_runs = int(latency_cfg["n_runs"])
 
-    ckpt_path = Path("models/checkpoints/autoencoder.pt")
+    ckpt_dir = Path(config.get("paths", {}).get("checkpoints", "models/checkpoints"))
+    ckpt_path = ckpt_dir / "autoencoder.pt"
+    latent_dim = int(config.get("autoencoder", {}).get("latent_dim", 32))
     if ckpt_path.is_file():
         candidate = load_checkpoint(ckpt_path)
         if getattr(candidate, "input_dim", None) == input_dim:
@@ -174,7 +176,7 @@ def main(argv: list[str] | None = None) -> None:
             pytorch_backend = "pytorch_dae"
             logger.info("Benchmarking trained autoencoder from %s", ckpt_path)
         else:
-            model = ReferenceEncoder(input_dim=input_dim, latent_dim=16)
+            model = ReferenceEncoder(input_dim=input_dim, latent_dim=latent_dim)
             pytorch_backend = "pytorch"
             logger.info(
                 "Checkpoint dim %s != input_dim %d; using ReferenceEncoder",
@@ -182,7 +184,7 @@ def main(argv: list[str] | None = None) -> None:
                 input_dim,
             )
     else:
-        model = ReferenceEncoder(input_dim=input_dim, latent_dim=16)
+        model = ReferenceEncoder(input_dim=input_dim, latent_dim=latent_dim)
         pytorch_backend = "pytorch"
         logger.info("Checkpoint %s absent; benchmarking ReferenceEncoder", ckpt_path)
     model.eval()
@@ -203,9 +205,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     stats.extend(pytorch_stats)
 
+    artifacts_dir = Path(config.get("paths", {}).get("artifacts", "models/artifacts"))
     onnx_candidates = [
-        Path("models/artifacts/autoencoder.onnx"),
-        Path("models/checkpoints/autoencoder.onnx"),
+        artifacts_dir / "autoencoder.onnx",
+        ckpt_dir / "autoencoder.onnx",
     ]
     onnx_path = next((p for p in onnx_candidates if p.is_file()), None)
     if onnx_path is not None:
