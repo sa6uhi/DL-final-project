@@ -7,10 +7,11 @@ on:
     branches: [master]
   workflow_dispatch:
     inputs:
-      publish_images:
-        description: "Build and publish Docker images to GHCR"
-        type: boolean
-        default: true
+      image_tag:
+        description: "Docker image tag (overwrites existing image in GHCR)"
+        required: true
+        type: string
+        default: "v1.0-final"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -84,7 +85,7 @@ jobs:
   docker-images:
     name: Build & Publish Docker Images (GHCR)
     needs: [lint, test]
-    if: github.event_name == 'workflow_dispatch' && (inputs.publish_images == true || inputs.publish_images == null)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -116,9 +117,7 @@ jobs:
           context: .
           file: docker/Dockerfile.infer
           push: true
-          tags: |
-            ghcr.io/${{ env.OWNER_LC }}/dl-final-project-api:latest
-            ghcr.io/${{ env.OWNER_LC }}/dl-final-project-api:${{ github.sha }}
+          tags: ghcr.io/${{ env.OWNER_LC }}/dl-final-project-api:${{ inputs.image_tag || 'v1.0-final' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -128,8 +127,6 @@ jobs:
           context: .
           file: docker/Dockerfile.train
           push: true
-          tags: |
-            ghcr.io/${{ env.OWNER_LC }}/dl-final-project-train:latest
-            ghcr.io/${{ env.OWNER_LC }}/dl-final-project-train:${{ github.sha }}
+          tags: ghcr.io/${{ env.OWNER_LC }}/dl-final-project-train:${{ inputs.image_tag || 'v1.0-final' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
