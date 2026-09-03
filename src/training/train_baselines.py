@@ -1,15 +1,13 @@
-"""
-Training script for Classical ML Baselines.
-"""
+"""Training script for Classical ML Baselines."""
 
-import pandas as pd
 import pickle
 from pathlib import Path
 from typing import Dict
 
-from src.utils.config import load_config
-from src.models.baselines import get_baselines
+import pandas as pd
 from src.evaluation.metrics_a import evaluate_fraud_metrics
+from src.models.baselines import get_baselines
+from src.utils.config import load_config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -37,6 +35,10 @@ def main() -> None:
     y_train = train_df[target_col]
     X_val = val_df.drop(columns=drop_cols)
     y_val = val_df[target_col]
+
+    # Drop any remaining string/object columns that baselines can't process
+    X_train = X_train.select_dtypes(exclude=["object"])
+    X_val = X_val.select_dtypes(exclude=["object"])
 
     logger.info(f"Training data shape: {X_train.shape}")
 
