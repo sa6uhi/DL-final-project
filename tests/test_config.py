@@ -173,3 +173,12 @@ def test_default_config_path_exists() -> None:
     cfg = load_config()
     assert isinstance(cfg, Config)
     assert cfg.seed == 42
+
+
+def test_iter_leaf_pairs_yields_dot_paths(sample_yaml: str) -> None:
+    """_iter_leaf_pairs flattens nested keys into dot-separated paths."""
+    cfg = load_config(sample_yaml)
+    pairs = dict(cfg._iter_leaf_pairs())
+    assert pairs["seed"] == 42
+    assert pairs["nested.a.b.c"] == 7
+    assert pairs["paths.data"] == "data/raw"

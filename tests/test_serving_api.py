@@ -194,9 +194,28 @@ def test_predict_without_gate_ignores_ft_probability(
     client: TestClient, features: list[float]
 ) -> None:
     """DAE-only /predict accepts ft_probability but does not fuse it."""
-    body = client.post("/predict", json={"features": features, "ft_probability": 0.9}).json()
+    body = client.post(
+        "/predict", json={"features": features, "ft_probability": 0.9}
+    ).json()
     assert body["gate_used"] is False
     assert client.get("/health").json()["gate_loaded"] is False
+
+
+def test_decide_maps_probability_to_triage_band() -> None:
+    """_decide routes low/mid/high probabilities to the right decisions."""
+    from src.serving.api import _decide
+
+    assert _decide(0.01, 0.15, 0.85, 0.50) == ("auto_approve", False)
+    assert _decide(0.99, 0.15, 0.85, 0.50) == ("auto_block", True)
+    assert _decide(0.60, 0.15, 0.85, 0.50) == ("escalate", True)
+    assert _decide(0.30, 0.15, 0.85, 0.50) == ("escalate", False)
+
+
+def test_score_batch_posterior_size_mismatch_raises(client: TestClient) -> None:
+    """Mismatched ft_probabilities batch size raises ValueError."""
+    scorer = client.app.state.scorer
+    with pytest.raises(ValueError, match="match the batch size"):
+        scorer.score_batch([[0.0] * 20, [0.0] * 20], [0.5])
 
 
 def test_health_reports_gate_loaded(gated_client: TestClient) -> None:
