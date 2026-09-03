@@ -81,13 +81,16 @@ def test_predict_invalid_payload_type_is_422(client: TestClient) -> None:
 def test_predict_non_finite_features_rejected(client: TestClient) -> None:
     """NaN or infinite features are rejected by schema validation."""
     from pydantic import ValidationError
-    from src.serving.schemas import PredictionRequest
+    from src.serving.schemas import ExplainRequest, PredictionRequest
 
     with pytest.raises(ValidationError, match="finite"):
         PredictionRequest(features=[float("nan")] * 20)
 
     with pytest.raises(ValidationError, match="finite"):
         PredictionRequest(features=[float("inf")] * 20)
+
+    with pytest.raises(ValidationError, match="finite"):
+        ExplainRequest(features=[float("nan")] * 20)
 
     raw_payload = '{"features": [' + ", ".join(["NaN"] * 20) + "]}"
     response = client.post(
