@@ -148,3 +148,73 @@ class MetricsResponse(BaseModel):
     errors_total: int = Field(..., ge=0)
     avg_latency_ms: float = Field(..., ge=0.0)
     p99_latency_ms: float = Field(..., ge=0.0)
+
+
+class RiskDriver(BaseModel):
+    """Individual feature contribution to the fraud/anomaly assessment.
+
+    Attributes:
+        feature_name: Name or index of the contributing feature.
+        attribution: Attribution score (positive increases risk, negative decreases).
+        value: Original numeric feature value.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    feature_name: str
+    attribution: float
+    value: Optional[float] = None
+
+
+class ExplainRequest(BaseModel):
+    """Payload for transaction feature attribution explanation.
+
+    Attributes:
+        features: Numeric feature vector matching the model input.
+        transaction_id: Optional identifier for logging/tracking.
+        top_k: Number of top contributing risk drivers to return (default 5).
+        ft_probability: Optional FT-Transformer probability for fused attribution.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    features: list[float] = Field(..., min_length=N_FEATURES_MIN, max_length=N_FEATURES_MAX)
+    transaction_id: Optional[str] = Field(default=None, max_length=64)
+    top_k: int = Field(default=5, ge=1, le=50)
+    ft_probability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+    @field_validator("features")
+    @classmethod
+    def validate_finite_features(cls, features: list[float]) -> list[float]:
+        """Ensure all feature values are finite (no NaN or Inf).
+
+        Args:
+            features: List of float values to validate.
+
+        Returns:
+            The validated list of features.
+
+        Raises:
+            ValueError: If any element is NaN or infinite.
+        """
+        if any(not math.isfinite(x) for x in features):
+            raise ValueError("All features must be finite numbers (no NaN or Inf)")
+        return features
+
+
+class ExplainResponse(BaseModel):
+    """Attribution breakdown explaining risk drivers for a transaction.
+
+    Attributes:
+        transaction_id: Echoed identifier (if provided).
+        top_drivers: Ordered list of top risk-increasing features.
+        method: Attribution method used (e.g. 'shap' or 'dae_reconstruction_residual').
+        latency_ms: Processing duration in milliseconds.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    transaction_id: Optional[str] = None
+    top_drivers: list[RiskDriver]
+    method: str
+    latency_ms: float = Field(..., ge=0.0)
