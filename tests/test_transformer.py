@@ -117,6 +117,7 @@ def test_checkpoint_stays_within_the_size_budget() -> None:
     )
     assert count_parameters(model) * 4 < 1_000_000
 
+
 def test_cross_attention_weights_have_expected_shape(
     tiny_config: Config, batch: tuple[torch.Tensor, ...]
 ) -> None:
@@ -169,6 +170,7 @@ def test_cross_attention_makes_history_matter(
         assert not torch.allclose(ft_cat(x_cont, x_cat, seq), ft_cat(x_cont, x_cat, other))
         assert torch.allclose(self_only(x_cont, x_cat, seq), self_only(x_cont, x_cat, other))
 
+
 def test_padding_mask_flags_zero_filled_slots() -> None:
     """Zero rows are padding; a row of real values is not."""
     seq = torch.zeros(1, 3, 2)
@@ -201,6 +203,7 @@ def test_history_encoder_rejects_degenerate_shapes(kwargs: dict) -> None:
     base.update(kwargs)
     with pytest.raises(ValueError, match="must be positive"):
         HistoryEncoder(**base)
+
 
 @pytest.mark.parametrize("variant", VARIANTS)
 def test_gradients_are_finite_and_non_zero(
