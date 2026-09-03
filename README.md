@@ -58,7 +58,7 @@ Measured on standard CPU across 200 timed evaluation runs on the 800-dimensional
 
 ### Option A: Docker Compose (Prebuilt Images)
 
-Docker automatically pulls prebuilt images from the GitHub Container Registry (`ghcr.io/sa6uhi/dl-final-project-api:latest`):
+Docker automatically pulls prebuilt images from the GitHub Container Registry (`ghcr.io/sa6uhi/dl-final-project-api:v1.0-final`):
 
 ```bash
 # Start the FastAPI inference microservice on port 8000
@@ -172,4 +172,4 @@ flake8 src tests
 The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every pull request and push to `master`:
 * **Linting Job:** Validates formatting (`black`) and PEP 8 compliance (`flake8`).
 * **Testing Job:** Runs the complete test suite ensuring $\ge 80\%$ test coverage.
-* **Docker Packaging (Manual Trigger):** A `workflow_dispatch` stage builds and publishes multi-stage OCI images to GitHub Container Registry (`ghcr.io/sa6uhi/dl-final-project-api` and `ghcr.io/sa6uhi/dl-final-project-train`).
+* **Docker Packaging (Manual Trigger):** A `workflow_dispatch` stage builds and publishes multi-stage OCI images to GitHub Container Registry (`ghcr.io/sa6uhi/dl-final-project-api:v1.0-final` and `ghcr.io/sa6uhi/dl-final-project-train:v1.0-final`). Trigger manually via GitHub CLI (`gh workflow run ci.yml`) or the Actions tab.
