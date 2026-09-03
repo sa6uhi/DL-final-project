@@ -20,13 +20,29 @@ N_FEATURES_MAX = 2500
 MAX_BATCH_SIZE = 256
 
 
+def _validate_finite_features(features: list[float]) -> list[float]:
+    """Ensure all feature values are finite (no NaN or Inf).
+
+    Args:
+        features: List of float values to validate.
+
+    Returns:
+        The validated list of features.
+
+    Raises:
+        ValueError: If any element is NaN or infinite.
+    """
+    if any(not math.isfinite(x) for x in features):
+        raise ValueError("All features must be finite numbers (no NaN or Inf)")
+    return features
+
+
 class PredictionRequest(BaseModel):
-    """A single transaction feature vector to score.
+    """Payload for a single transaction scoring request.
 
     Attributes:
-        features: Raw numeric feature vector of a transaction. Exact
-            dimensionality is validated at the model level at runtime.
-        transaction_id: Optional external transaction identifier.
+        features: Continuous feature vector expected by the active model.
+        transaction_id: Optional transaction identifier for logging and triage.
         card_id: Optional masked cardholder identifier for triage context.
         ft_probability: Optional supervised FT-Transformer fraud posterior in
             ``[0, 1]``. When the learned hybrid gate is loaded, this is fused
@@ -43,20 +59,8 @@ class PredictionRequest(BaseModel):
     @field_validator("features")
     @classmethod
     def validate_finite_features(cls, features: list[float]) -> list[float]:
-        """Ensure all feature values are finite (no NaN or Inf).
-
-        Args:
-            features: List of float values to validate.
-
-        Returns:
-            The validated list of features.
-
-        Raises:
-            ValueError: If any element is NaN or infinite.
-        """
-        if any(not math.isfinite(x) for x in features):
-            raise ValueError("All features must be finite numbers (no NaN or Inf)")
-        return features
+        """Validate that all feature values are finite numbers."""
+        return _validate_finite_features(features)
 
 
 class StreamRequest(BaseModel):
@@ -186,20 +190,8 @@ class ExplainRequest(BaseModel):
     @field_validator("features")
     @classmethod
     def validate_finite_features(cls, features: list[float]) -> list[float]:
-        """Ensure all feature values are finite (no NaN or Inf).
-
-        Args:
-            features: List of float values to validate.
-
-        Returns:
-            The validated list of features.
-
-        Raises:
-            ValueError: If any element is NaN or infinite.
-        """
-        if any(not math.isfinite(x) for x in features):
-            raise ValueError("All features must be finite numbers (no NaN or Inf)")
-        return features
+        """Validate that all feature values are finite numbers."""
+        return _validate_finite_features(features)
 
 
 class ExplainResponse(BaseModel):
