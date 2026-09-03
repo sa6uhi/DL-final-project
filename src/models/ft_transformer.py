@@ -260,7 +260,7 @@ class FTCATransformer(nn.Module):
             norm_first=norm_first,
             batch_first=True,
         )
-        # Nested tensors are unavailable under pre-norm ordering; disabling the fast path explicitly keeps the constructor from warning on every build.
+        
         self.encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=n_layers, enable_nested_tensor=False
         )
