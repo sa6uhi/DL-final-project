@@ -14,6 +14,7 @@ from src.training.train_autoencoder import (
     save_checkpoint,
     train_autoencoder,
 )
+from src.utils.config import Config
 
 torch.backends.cudnn.deterministic = True
 
@@ -34,8 +35,6 @@ def ae(config) -> DenoisingAutoencoder:
 @pytest.fixture()
 def config_small(tmp_path):
     """Minimal config overriding the DAE to tiny architecture and 2 epochs."""
-    from src.utils.config import Config
-
     cfg = Config(
         {
             "autoencoder": {
@@ -309,3 +308,176 @@ def test_train_reduces_loss(config_small, tmp_path: Path) -> None:
     )
     reloaded = load_checkpoint(out)
     assert torch.allclose(model(torch.from_numpy(val_x[:4])), reloaded(torch.from_numpy(val_x[:4])))
+
+
+def _tiny_train_config(tmp_path: Path, **training_overrides: float | int) -> Config:
+    """Build a minimal CPU training config with overridable training knobs."""
+    training = {
+        "lr": 1.0e-3,
+        "weight_decay": 1.0e-5,
+        "epochs": 2,
+        "batch_size": 16,
+        "num_workers": 0,
+        "pin_memory": False,
+        "early_stopping_patience": 5,
+        "min_delta": 1.0e-6,
+    }
+    training.update(training_overrides)
+    return Config(
+        {
+            "autoencoder": {
+                "input_dim": 8,
+                "encoder_hidden_dims": [4],
+                "latent_dim": 2,
+                "dropout": 0.0,
+                "noise_std": 0.1,
+                "feature_dropout_prob": 0.0,
+                "activation_slope": 0.2,
+                "training": training,
+                "loss": {"mse_weight": 0.5, "bce_weight": 0.5},
+            },
+            "seed": 42,
+        },
+        base_dir=tmp_path,
+    )
+
+
+def test_load_checkpoint_without_meta_raises(tmp_path: Path) -> None:
+    """load_checkpoint raises KeyError when architecture metadata is absent."""
+    payload = {"state_dict": {}}
+    ckpt = tmp_path / "nometa.pt"
+    torch.save(payload, ckpt)
+    with pytest.raises(KeyError):
+        load_checkpoint(ckpt)
+
+
+def test_train_accepts_torch_tensors(tmp_path: Path) -> None:
+    """Tensor inputs (not only numpy) train and checkpoint normally."""
+    torch.manual_seed(0)
+    cfg = _tiny_train_config(tmp_path)
+    train_x = torch.randn(32, 8)
+    val_x = torch.randn(8, 8)
+    out = tmp_path / "tensors.pt"
+    model = train_autoencoder(train_x, cfg, val_x, out_path=out, device="cpu")
+    assert out.is_file()
+    assert model.input_dim == 8
+
+
+def test_train_rejects_bad_dimensions(tmp_path: Path) -> None:
+    """1D or empty training matrices raise ValueError."""
+    cfg = _tiny_train_config(tmp_path)
+    with pytest.raises(ValueError):
+        train_autoencoder(np.zeros(8, dtype=np.float32), cfg, device="cpu")
+    with pytest.raises(ValueError):
+        train_autoencoder(np.zeros((0, 8), dtype=np.float32), cfg, device="cpu")
+
+
+def test_train_splits_validation_when_val_missing(tmp_path: Path) -> None:
+    """Omitting val_x falls back to the trailing 10% of the training rows."""
+    torch.manual_seed(1)
+    cfg = _tiny_train_config(tmp_path)
+    rng = np.random.default_rng(1)
+    train_x = rng.standard_normal((40, 8)).astype(np.float32)
+    model = train_autoencoder(train_x, cfg, val_x=None, out_path=tmp_path / "split.pt")
+    assert model.input_dim == 8
+
+
+def test_train_empty_val_falls_back_to_train_sample(tmp_path: Path) -> None:
+    """An empty validation matrix falls back to a single training sample."""
+    torch.manual_seed(2)
+    cfg = _tiny_train_config(tmp_path)
+    rng = np.random.default_rng(2)
+    train_x = rng.standard_normal((32, 8)).astype(np.float32)
+    val_x = np.zeros((0, 8), dtype=np.float32)
+    model = train_autoencoder(train_x, cfg, val_x, out_path=tmp_path / "empty_val.pt")
+    assert model.input_dim == 8
+
+
+def test_train_early_stopping_breaks(tmp_path: Path) -> None:
+    """An impossible min_delta stalls validation and triggers the early-stop break."""
+    torch.manual_seed(3)
+    cfg = _tiny_train_config(tmp_path, epochs=5, early_stopping_patience=1, min_delta=1.0)
+    rng = np.random.default_rng(3)
+    train_x = rng.standard_normal((32, 8)).astype(np.float32)
+    val_x = rng.standard_normal((8, 8)).astype(np.float32)
+    model = train_autoencoder(train_x, cfg, val_x, out_path=tmp_path / "early.pt")
+    assert (tmp_path / "early.pt").is_file()
+    assert model.input_dim == 8
+
+
+def test_invalid_feature_dropout_prob_raises() -> None:
+    """feature_dropout_prob outside [0, 1] raises ValueError."""
+    with pytest.raises(ValueError):
+        DenoisingAutoencoder(input_dim=8, feature_dropout_prob=1.5)
+
+
+def test_main_trains_from_parquet_cli(tmp_path: Path) -> None:
+    """main() trains end-to-end from tiny parquet splits and a yaml config."""
+    import logging
+
+    import pandas as pd
+    import yaml
+
+    import src.utils.logger as logger_module
+    from src.training.train_autoencoder import main
+
+    rng = np.random.default_rng(7)
+    cols = {f"f{i}": rng.standard_normal(48) for i in range(8)}
+    cols["isFraud"] = [0] * 40 + [1] * 8
+    train_df = pd.DataFrame(cols)
+    train_path = tmp_path / "train.parquet"
+    train_df.to_parquet(train_path, index=False)
+    val_cols = {f"f{i}": rng.standard_normal(24) for i in range(8)}
+    val_cols["isFraud"] = [0] * 20 + [1] * 4
+    val_path = tmp_path / "val.parquet"
+    pd.DataFrame(val_cols).to_parquet(val_path, index=False)
+
+    config_payload = {
+        "logging": {"level": "INFO", "log_file": "cli.log"},
+        "seed": 42,
+        "data": {
+            "non_feature_cols": ["isFraud"],
+            "train_data_path": str(train_path),
+            "val_data_path": str(val_path),
+        },
+        "autoencoder": {
+            "input_dim": 8,
+            "encoder_hidden_dims": [4],
+            "latent_dim": 2,
+            "dropout": 0.0,
+            "noise_std": 0.1,
+            "feature_dropout_prob": 0.0,
+            "activation_slope": 0.2,
+            "training": {
+                "lr": 1.0e-3,
+                "weight_decay": 1.0e-5,
+                "epochs": 2,
+                "batch_size": 16,
+                "num_workers": 0,
+                "pin_memory": False,
+                "early_stopping_patience": 5,
+                "min_delta": 1.0e-6,
+            },
+            "loss": {"mse_weight": 0.5, "bce_weight": 0.5},
+        },
+    }
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
+    out = tmp_path / "cli.pt"
+
+    root_logger = logging.getLogger()
+    prev_handlers = list(root_logger.handlers)
+    prev_configured = logger_module._configured
+    logger_module._configured = False
+    try:
+        main(["--config", str(config_file), "--out", str(out), "--device", "cpu"])
+    finally:
+        for handler in list(root_logger.handlers):
+            if handler not in prev_handlers:
+                root_logger.removeHandler(handler)
+                handler.close()
+        logger_module._configured = prev_configured
+
+    assert out.is_file()
+    reloaded = load_checkpoint(out)
+    assert reloaded.input_dim == 8

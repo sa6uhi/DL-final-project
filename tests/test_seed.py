@@ -56,3 +56,20 @@ def test_seed_everything_pytorch_when_available() -> None:
     torch = pytest.importorskip("torch")
     seed_everything(123)
     assert torch.initial_seed() == 123
+
+
+def test_seed_everything_without_torch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing PyTorch is skipped gracefully instead of raising."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "torch", None)
+    seed_everything(42)
+    assert os.environ["PYTHONHASHSEED"] == "42"
+
+
+def test_seed_everything_cuda_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CUDA deterministic path runs when a GPU is reported."""
+    torch = pytest.importorskip("torch")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    seed_everything(7)
+    assert torch.initial_seed() == 7
