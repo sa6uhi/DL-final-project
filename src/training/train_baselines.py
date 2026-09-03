@@ -38,6 +38,10 @@ def main() -> None:
     X_val = val_df.drop(columns=drop_cols)
     y_val = val_df[target_col]
 
+    # Drop any remaining string/object columns that baselines can't process
+    X_train = X_train.select_dtypes(exclude=['object'])
+    X_val = X_val.select_dtypes(exclude=['object'])
+
     logger.info(f"Training data shape: {X_train.shape}")
 
     # 3. Get Models
