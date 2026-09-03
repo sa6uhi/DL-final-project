@@ -10,6 +10,8 @@ caller-supplied FT-Transformer posterior (``ft_probability``).
 
 from __future__ import annotations
 
+import math
+import os
 import time
 from collections import deque
 from pathlib import Path
@@ -45,17 +47,19 @@ _ScoreFn = Callable[[np.ndarray], np.ndarray]
 
 
 def _score_to_probability(score: np.ndarray, const: float) -> np.ndarray:
-    """Map residual scores monotonically into the probability interval.
+    """Map residual scores monotonically into the pseudo-probability interval.
 
-    Uses the saturating transform ``p = s / (s + const)`` to clamp scores
-    to ``[0, 1)`` without needing a calibration dataset.
+    Uses the soft-saturating transform ``p = s / (s + const)`` to project
+    unbounded reconstruction residuals onto ``[0, 1)``. Note: This mapping
+    is an uncalibrated monotonic proxy for standalone DAE scoring; formal
+    coverage guarantees are governed by downstream conformal prediction.
 
     Args:
         score: Per-sample anomaly residual scores.
-        const: Saturating constant from the central configuration.
+        const: Positive scaling constant governing the half-saturation point.
 
     Returns:
-        Probability-likeness in ``[0, 1)``.
+        Pseudo-probability array in ``[0, 1)``.
     """
     return score / (score + const)
 
@@ -116,10 +120,19 @@ def build_scorer(config: Config) -> "Scorer":
         A ready-to-serve :class:`Scorer` instance.
     """
     model_path = Path(config.serving.model_path)
+    require_ckpt = os.environ.get("SERVING_REQUIRE_CHECKPOINT", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     if model_path.is_file():
         model = load_checkpoint(model_path)
         logger.info("Loaded autoencoder checkpoint from %s", model_path)
         loaded_serialized = True
+    elif require_ckpt:
+        raise FileNotFoundError(
+            f"SERVING_REQUIRE_CHECKPOINT is enabled but checkpoint not found at {model_path}"
+        )
     else:
         model = build_reference_model(input_dim=int(config.autoencoder.input_dim))
         logger.warning("Checkpoint %s missing; using reference scoring model", model_path)
@@ -231,6 +244,8 @@ class Scorer:
         """
         if len(features) != self.input_dim:
             raise ValueError(f"Expected {self.input_dim} features, got {len(features)}")
+        if any(not math.isfinite(x_val) for x_val in features):
+            raise ValueError("All features must be finite numbers (no NaN or Inf)")
         x = torch.as_tensor(np.asarray([features], dtype=np.float32))
         with torch.no_grad():
             score = self.model.anomaly_score(x, l1_gamma=self.l1_gamma).item()
@@ -261,8 +276,13 @@ class Scorer:
         Returns:
             Per-transaction score dicts in request order.
         """
+        if not features_batch:
+            raise ValueError("Batch cannot be empty")
         if any(len(f) != self.input_dim for f in features_batch):
             raise ValueError(f"All rows must have exactly {self.input_dim} features")
+        for row in features_batch:
+            if any(not math.isfinite(x_val) for x_val in row):
+                raise ValueError("All features must be finite numbers (no NaN or Inf)")
         if ft_probabilities is not None and len(ft_probabilities) != len(features_batch):
             raise ValueError("ft_probabilities must match the batch size")
         x = torch.as_tensor(np.asarray(features_batch, dtype=np.float32))
@@ -455,9 +475,9 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.get("/metrics", response_model=MetricsResponse)
     async def metrics() -> MetricsResponse:
         """Self-monitoring counters: volume, errors, latency percentiles."""
-        latencies = sorted(app.state.latencies)
-        avg = sum(latencies) / len(latencies) if latencies else 0.0
-        p99 = latencies[min(len(latencies) - 1, int(0.99 * len(latencies)))] if latencies else 0.0
+        latencies = list(app.state.latencies)
+        avg = float(np.mean(latencies)) if latencies else 0.0
+        p99 = float(np.percentile(latencies, 99)) if latencies else 0.0
         return MetricsResponse(
             requests_total=app.state.requests_total,
             errors_total=app.state.errors_total,
