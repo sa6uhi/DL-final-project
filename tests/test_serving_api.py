@@ -150,3 +150,105 @@ def test_value_error_handler_returns_400(client: TestClient) -> None:
     response = asyncio.run(handler(StarletteRequest(scope), ValueError("boom")))
     assert response.status_code == 400
     assert b'"boom"' in response.body
+
+
+@pytest.fixture()
+def gated_client(tmp_path) -> TestClient:
+    """Test client with a learned hybrid gate checkpoint on disk."""
+    import torch
+
+    from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
+    from src.training.train_hybrid_gating import save_checkpoint
+
+    seed_everything(42)
+    gate = LearnedHybridGate(input_dim=2, hidden_dims=[16, 8], dropout=0.1)
+    gate.eval()
+    normalizer = PercentileNormalizer(percentile=99.0).fit(
+        torch.tensor([0.1, 0.5, 1.0, 2.0], dtype=torch.float32)
+    )
+    gate_path = tmp_path / "hybrid_gating.pt"
+    save_checkpoint(gate, normalizer, gate_path)
+    cfg = Config(
+        {
+            "autoencoder": {
+                "input_dim": 20,
+                "anomaly_score": {"l1_gamma": 0.4},
+            },
+            "serving": {
+                "model_path": str(tmp_path / "missing.pt"),
+                "anomaly_const": 2.0,
+            },
+            "scoring": {
+                "approve_threshold": 0.15,
+                "block_threshold": 0.85,
+                "escalate_threshold": 0.50,
+            },
+            "hybrid_gating": {"learned": {"checkpoint_path": str(gate_path)}},
+        },
+        base_dir=tmp_path,
+    )
+    return TestClient(create_app(cfg))
+
+
+def test_predict_without_gate_ignores_ft_probability(
+    client: TestClient, features: list[float]
+) -> None:
+    """DAE-only /predict accepts ft_probability but does not fuse it."""
+    body = client.post("/predict", json={"features": features, "ft_probability": 0.9}).json()
+    assert body["gate_used"] is False
+    assert client.get("/health").json()["gate_loaded"] is False
+
+
+def test_health_reports_gate_loaded(gated_client: TestClient) -> None:
+    """GET /health reflects the loaded hybrid gate."""
+    body = gated_client.get("/health").json()
+    assert body["gate_loaded"] is True
+
+
+def test_predict_with_gate_fuses_ft_probability(
+    gated_client: TestClient, features: list[float]
+) -> None:
+    """Gate-loaded /predict fuses the FT posterior into the probability."""
+    low = gated_client.post("/predict", json={"features": features, "ft_probability": 0.01}).json()
+    high = gated_client.post("/predict", json={"features": features, "ft_probability": 0.99}).json()
+    assert low["gate_used"] is True
+    assert high["gate_used"] is True
+    assert 0.0 <= low["fraud_probability"] <= 1.0
+    assert high["fraud_probability"] > low["fraud_probability"]
+
+
+def test_predict_with_gate_missing_ft_probability_is_422(
+    gated_client: TestClient, features: list[float]
+) -> None:
+    """Gate-loaded /predict without ft_probability is rejected."""
+    response = gated_client.post("/predict", json={"features": features})
+    assert response.status_code == 422
+
+
+def test_stream_with_gate_fuses_batch(gated_client: TestClient, features: list[float]) -> None:
+    """Gate-loaded /stream fuses per-transaction FT posteriors in order."""
+    payload = {
+        "transactions": [
+            {"features": features, "ft_probability": 0.1},
+            {"features": features, "ft_probability": 0.9},
+        ]
+    }
+    response = gated_client.post("/stream", json=payload)
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert all(r["gate_used"] is True for r in results)
+    assert results[1]["fraud_probability"] > results[0]["fraud_probability"]
+
+
+def test_stream_with_gate_partial_ft_probability_is_422(
+    gated_client: TestClient, features: list[float]
+) -> None:
+    """Gate-loaded /stream with mixed ft_probability presence is rejected."""
+    payload = {
+        "transactions": [
+            {"features": features, "ft_probability": 0.1},
+            {"features": features},
+        ]
+    }
+    response = gated_client.post("/stream", json=payload)
+    assert response.status_code == 422

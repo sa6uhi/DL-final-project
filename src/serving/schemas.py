@@ -27,6 +27,9 @@ class PredictionRequest(BaseModel):
             dimensionality is validated at the model level at runtime.
         transaction_id: Optional external transaction identifier.
         card_id: Optional masked cardholder identifier for triage context.
+        ft_probability: Optional supervised FT-Transformer fraud posterior in
+            ``[0, 1]``. When the learned hybrid gate is loaded, this is fused
+            with the DAE residual; otherwise it is ignored.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -34,6 +37,7 @@ class PredictionRequest(BaseModel):
     features: list[float] = Field(..., min_length=N_FEATURES_MIN, max_length=N_FEATURES_MAX)
     transaction_id: Optional[str] = Field(default=None, max_length=64)
     card_id: Optional[str] = Field(default=None, max_length=64)
+    ft_probability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 class StreamRequest(BaseModel):
@@ -58,6 +62,8 @@ class PredictionResponse(BaseModel):
         anomaly_score: Raw DAE reconstruction residual score.
         decision: Triage policy decision.
         latency_ms: End-to-end request latency in milliseconds.
+        gate_used: Whether the learned hybrid gate fused the DAE residual
+            with the FT-Transformer posterior for this prediction.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -68,6 +74,7 @@ class PredictionResponse(BaseModel):
     anomaly_score: float = Field(..., ge=0.0)
     decision: Decision
     latency_ms: float = Field(..., ge=0.0)
+    gate_used: bool = False
 
 
 class StreamResponse(BaseModel):
@@ -94,6 +101,7 @@ class HealthResponse(BaseModel):
         version: Package version of the running service.
         model_loaded: Whether a real checkpoint (vs reference model) is up.
         uptime_s: Seconds since the process started.
+        gate_loaded: Whether the learned hybrid gate checkpoint is up.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -102,6 +110,7 @@ class HealthResponse(BaseModel):
     version: str
     model_loaded: bool
     uptime_s: float = Field(..., ge=0.0)
+    gate_loaded: bool = False
 
 
 class MetricsResponse(BaseModel):

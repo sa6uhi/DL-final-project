@@ -23,7 +23,11 @@ logging:
 # Semi-Supervised Deep Denoising Autoencoder
 # ---------------------------------------------------------------------------
 autoencoder:
-  input_dim: 831
+  # DAE input dimension: 400 continuous features (incl. sequence columns) +
+  # 400 missingness (`_is_nan`) indicators after preprocessing. The 31 `str`
+  # categoricals stay out of the DAE; the FT transformer consumes them
+  # separately through its own feature contract.
+  input_dim: 800
   encoder_hidden_dims: [256, 128]
   latent_dim: 32
   activation: "leaky_relu"
