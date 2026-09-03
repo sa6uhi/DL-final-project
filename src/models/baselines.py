@@ -41,7 +41,7 @@ def get_baselines(y_train: Any) -> Dict[str, Any]:
 
     models = {
         "LogReg_Balanced": LogisticRegression(
-            class_weight="balanced", max_iter=1000, n_jobs=-1, random_state=42
+            class_weight="balanced", max_iter=1000, random_state=42
         ),
         "RandomForest_Balanced": RandomForestClassifier(
             n_estimators=200,
