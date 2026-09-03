@@ -31,7 +31,7 @@ services:
     environment:
       - CONFIG_PATH=/app/config/config.yaml
     volumes:
-      - ../data:/data
+      - ../data:/app/data
       - ../models:/app/models
       - ../logs:/app/logs
     command: ["run_all.sh"]

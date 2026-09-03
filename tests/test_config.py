@@ -182,3 +182,12 @@ def test_iter_leaf_pairs_yields_dot_paths(sample_yaml: str) -> None:
     assert pairs["seed"] == 42
     assert pairs["nested.a.b.c"] == 7
     assert pairs["paths.data"] == "data/raw"
+
+
+def test_load_config_env_var_override(sample_yaml: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """CONFIG_PATH environment variable overrides the default path."""
+    monkeypatch.setenv("CONFIG_PATH", sample_yaml)
+    cfg = load_config()
+    assert isinstance(cfg, Config)
+    assert cfg.seed == 42
+    assert cfg.nested.a.b.c == 7

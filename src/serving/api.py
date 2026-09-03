@@ -22,6 +22,8 @@ from fastapi.responses import JSONResponse
 
 from src.serving.model_serializer import build_reference_model
 from src.serving.schemas import (
+    ExplainRequest,
+    ExplainResponse,
     HealthResponse,
     MetricsResponse,
     PredictionRequest,
@@ -286,6 +288,52 @@ class Scorer:
             )
         return results
 
+    def explain(
+        self, features: list[float], top_k: int = 5, ft_probability: float | None = None
+    ) -> dict[str, Any]:
+        """Explain feature risk drivers for a single transaction.
+
+        If the fast-path SHAP explainer module (``src.explainability.shap_explainer``)
+        is importable, delegates to it. Otherwise, computes fast-path
+        reconstruction residual attributions from the DAE.
+
+        Args:
+            features: Feature vector of length ``input_dim``.
+            top_k: Number of highest-risk features to return.
+            ft_probability: Optional supervised fraud probability.
+
+        Returns:
+            Dict containing ``top_drivers`` and ``method``.
+
+        Raises:
+            ValueError: If feature vector length does not match ``input_dim``.
+        """
+        if len(features) != self.input_dim:
+            raise ValueError(f"Expected {self.input_dim} features, got {len(features)}")
+        try:
+            from src.explainability.shap_explainer import explain_transaction  # type: ignore
+
+            drivers = explain_transaction(features, top_k=top_k, ft_probability=ft_probability)
+            return {"top_drivers": drivers, "method": "shap"}
+        except ImportError, AttributeError:
+            x = torch.as_tensor(np.asarray([features], dtype=np.float32))
+            with torch.no_grad():
+                if hasattr(self.model, "decode") and hasattr(self.model, "encode"):
+                    x_hat = self.model(x)
+                    residuals = (x - x_hat).abs().squeeze(0).cpu().numpy()
+                else:
+                    residuals = np.abs(np.asarray(features))
+            top_indices = np.argsort(residuals)[::-1][:top_k]
+            drivers = [
+                {
+                    "feature_name": f"feature_{idx}",
+                    "attribution": float(residuals[idx]),
+                    "value": float(features[idx]),
+                }
+                for idx in top_indices
+            ]
+            return {"top_drivers": drivers, "method": "dae_reconstruction_residual"}
+
 
 def create_app(config: Config | None = None) -> FastAPI:
     """Application factory wiring routes, models and self-monitoring.
@@ -362,6 +410,27 @@ def create_app(config: Config | None = None) -> FastAPI:
             for payload, raw in zip(request.transactions, results_raw)
         ]
         return StreamResponse(results=results, count=len(results), total_latency_ms=latency_ms)
+
+    @app.post("/explain", response_model=ExplainResponse)
+    def explain(request: ExplainRequest) -> ExplainResponse:
+        """Explain the primary risk drivers for a transaction."""
+        start = time.perf_counter()
+        try:
+            result = app.state.scorer.explain(
+                request.features, top_k=request.top_k, ft_probability=request.ft_probability
+            )
+        except ValueError as exc:
+            app.state.errors_total += 1
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        latency_ms = (time.perf_counter() - start) * 1000.0
+        app.state.latencies.append(latency_ms)
+        app.state.requests_total += 1
+        return ExplainResponse(
+            transaction_id=request.transaction_id,
+            top_drivers=result["top_drivers"],
+            method=result["method"],
+            latency_ms=latency_ms,
+        )
 
     @app.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:

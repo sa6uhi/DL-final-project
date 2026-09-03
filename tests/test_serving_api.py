@@ -78,6 +78,27 @@ def test_predict_invalid_payload_type_is_422(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_predict_non_finite_features_rejected(client: TestClient) -> None:
+    """NaN or infinite features are rejected by schema validation."""
+    from pydantic import ValidationError
+    from src.serving.schemas import ExplainRequest, PredictionRequest
+
+    with pytest.raises(ValidationError, match="finite"):
+        PredictionRequest(features=[float("nan")] * 20)
+
+    with pytest.raises(ValidationError, match="finite"):
+        PredictionRequest(features=[float("inf")] * 20)
+
+    with pytest.raises(ValidationError, match="finite"):
+        ExplainRequest(features=[float("nan")] * 20)
+
+    raw_payload = '{"features": [' + ", ".join(["NaN"] * 20) + "]}"
+    response = client.post(
+        "/predict", content=raw_payload, headers={"content-type": "application/json"}
+    )
+    assert response.status_code in {400, 422}
+
+
 def test_predict_empty_batch_rejected(client: TestClient) -> None:
     """Stream with no transactions is rejected."""
     response = client.post("/stream", json={"transactions": []})
@@ -269,3 +290,44 @@ def test_stream_with_gate_partial_ft_probability_is_422(
     }
     response = gated_client.post("/stream", json=payload)
     assert response.status_code == 422
+
+
+def test_explain_valid_features(client: TestClient, features: list[float]) -> None:
+    """POST /explain returns ordered risk drivers for a transaction."""
+    response = client.post(
+        "/explain", json={"features": features, "transaction_id": "tx-exp", "top_k": 3}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["transaction_id"] == "tx-exp"
+    assert len(body["top_drivers"]) == 3
+    assert body["method"] == "dae_reconstruction_residual"
+    assert body["latency_ms"] >= 0.0
+    assert body["top_drivers"][0]["attribution"] >= body["top_drivers"][1]["attribution"]
+
+
+def test_explain_wrong_feature_count_is_422(client: TestClient) -> None:
+    """POST /explain with mismatched feature count returns 422."""
+    response = client.post("/explain", json={"features": [1.0] * 8})
+    assert response.status_code == 422
+
+
+def test_explain_delegates_to_shap_when_available(
+    client: TestClient, features: list[float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /explain uses shap_explainer when the module is present."""
+    import sys
+    import types
+
+    fake_mod = types.ModuleType("src.explainability.shap_explainer")
+    fake_mod.explain_transaction = lambda feats, top_k=5, ft_probability=None: [  # type: ignore
+        {"feature_name": "Amount", "attribution": 0.42, "value": 150.0}
+    ]
+    monkeypatch.setitem(sys.modules, "src.explainability.shap_explainer", fake_mod)
+
+    response = client.post("/explain", json={"features": features, "top_k": 1})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["method"] == "shap"
+    assert body["top_drivers"][0]["feature_name"] == "Amount"
+    assert body["top_drivers"][0]["attribution"] == 0.42
