@@ -204,6 +204,8 @@ class LearnedHybridGate(nn.Module):
             raise ValueError("dropout must be in [0, 1)")
 
         self.input_dim = input_dim
+        self.hidden_dims = list(hidden_dims)
+        self.dropout = dropout
 
         layers: list[nn.Module] = []
         current_dim = input_dim
