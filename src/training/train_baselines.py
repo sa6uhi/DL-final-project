@@ -40,6 +40,10 @@ def main() -> None:
     X_train = X_train.select_dtypes(exclude=["object"])
     X_val = X_val.select_dtypes(exclude=["object"])
 
+    # Force-fill any stray NaNs (LogReg is strict about missing values)
+    X_train = X_train.fillna(0)
+    X_val = X_val.fillna(0)
+
     logger.info(f"Training data shape: {X_train.shape}")
 
     # 3. Get Models
