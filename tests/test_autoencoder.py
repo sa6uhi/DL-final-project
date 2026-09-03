@@ -481,3 +481,22 @@ def test_main_trains_from_parquet_cli(tmp_path: Path) -> None:
     assert out.is_file()
     reloaded = load_checkpoint(out)
     assert reloaded.input_dim == 8
+
+
+def test_train_read_only_arrays_emit_no_warning(tmp_path: Path) -> None:
+    """Read-only inputs (e.g. pandas views) train without the torch warning."""
+    import warnings
+
+    torch.manual_seed(4)
+    cfg = _tiny_train_config(tmp_path)
+    rng = np.random.default_rng(4)
+    train_x = rng.standard_normal((32, 8)).astype(np.float32)
+    train_x.setflags(write=False)
+    val_x = rng.standard_normal((8, 8)).astype(np.float32)
+    val_x.setflags(write=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        model = train_autoencoder(
+            train_x, cfg, val_x, out_path=tmp_path / "readonly.pt", device="cpu"
+        )
+    assert model.input_dim == 8
