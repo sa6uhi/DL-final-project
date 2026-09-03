@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 import torch
 
-from src.models.hybrid_gating import HybridGate, PercentileNormalizer
+from src.models.hybrid_gating import (
+    HybridGate,
+    LearnedHybridGate,
+    PercentileNormalizer,
+)
 
 
 @pytest.fixture()
@@ -144,3 +148,163 @@ def test_hybrid_gate_fuses_empty_shapes(
     gate = HybridGate(alpha=0.5, normalizer=fitted_normalizer)
     with pytest.raises(ValueError):
         gate.fuse(torch.tensor([]), torch.tensor([0.1]))
+
+
+@pytest.fixture()
+def learned_gate() -> LearnedHybridGate:
+    """Create a small learned gate for unit tests."""
+    return LearnedHybridGate(
+        input_dim=2,
+        hidden_dims=[16, 8],
+        dropout=0.1,
+    )
+
+
+@pytest.fixture()
+def feature_batch() -> torch.Tensor:
+    """Create a batch of learned-gate input features."""
+    return torch.rand(5, 2)
+
+
+def test_learned_gate_output_shape(
+    learned_gate: LearnedHybridGate,
+    feature_batch: torch.Tensor,
+) -> None:
+    """Return one fraud probability per transaction."""
+    output = learned_gate(feature_batch)
+
+    assert output.shape == (5,)
+
+
+def test_learned_gate_output_range(
+    learned_gate: LearnedHybridGate,
+    feature_batch: torch.Tensor,
+) -> None:
+    """Return probabilities bounded between zero and one."""
+    output = learned_gate(feature_batch)
+
+    assert (output >= 0.0).all()
+    assert (output <= 1.0).all()
+
+
+def test_learned_gate_gradient_flows(
+    learned_gate: LearnedHybridGate,
+    feature_batch: torch.Tensor,
+) -> None:
+    """Allow gradients to reach every trainable parameter."""
+    output = learned_gate(feature_batch)
+    output.sum().backward()
+
+    assert all(parameter.grad is not None for parameter in learned_gate.parameters())
+
+
+def test_learned_gate_wrong_ndim_raises(
+    learned_gate: LearnedHybridGate,
+) -> None:
+    """Reject one-dimensional input tensors."""
+    with pytest.raises(ValueError):
+        learned_gate(torch.rand(2))
+
+
+def test_learned_gate_wrong_feature_count_raises(
+    learned_gate: LearnedHybridGate,
+) -> None:
+    """Reject inputs with the wrong number of features."""
+    with pytest.raises(ValueError):
+        learned_gate(torch.rand(5, 3))
+
+
+def test_learned_gate_bad_input_dim_raises() -> None:
+    """Reject non-positive input dimensions."""
+    with pytest.raises(ValueError):
+        LearnedHybridGate(
+            input_dim=0,
+            hidden_dims=[16],
+            dropout=0.1,
+        )
+
+
+def test_learned_gate_bad_hidden_dims_raises() -> None:
+    """Reject empty or non-positive hidden dimensions."""
+    with pytest.raises(ValueError):
+        LearnedHybridGate(
+            input_dim=2,
+            hidden_dims=[],
+            dropout=0.1,
+        )
+
+    with pytest.raises(ValueError):
+        LearnedHybridGate(
+            input_dim=2,
+            hidden_dims=[16, 0],
+            dropout=0.1,
+        )
+
+
+def test_learned_gate_bad_dropout_raises() -> None:
+    """Reject dropout values outside the valid range."""
+    with pytest.raises(ValueError):
+        LearnedHybridGate(
+            input_dim=2,
+            hidden_dims=[16],
+            dropout=1.0,
+        )
+
+
+def test_learned_gate_state_dict_roundtrip(
+    learned_gate: LearnedHybridGate,
+    feature_batch: torch.Tensor,
+) -> None:
+    """Restore identical predictions from a saved state dictionary."""
+    learned_gate.eval()
+
+    restored = LearnedHybridGate(
+        input_dim=2,
+        hidden_dims=[16, 8],
+        dropout=0.1,
+    )
+    restored.load_state_dict(learned_gate.state_dict())
+    restored.eval()
+
+    assert torch.allclose(
+        learned_gate(feature_batch),
+        restored(feature_batch),
+    )
+
+
+def test_learned_gate_non_finite_input_raises(
+    learned_gate: LearnedHybridGate,
+) -> None:
+    """Reject NaN and infinite input values."""
+    with pytest.raises(ValueError):
+        learned_gate(
+            torch.tensor(
+                [
+                    [0.2, float("nan")],
+                    [0.4, 0.6],
+                ]
+            )
+        )
+
+    with pytest.raises(ValueError):
+        learned_gate(
+            torch.tensor(
+                [
+                    [0.2, float("inf")],
+                    [0.4, 0.6],
+                ]
+            )
+        )
+
+
+def test_learned_gate_eval_mode_is_deterministic(
+    learned_gate: LearnedHybridGate,
+    feature_batch: torch.Tensor,
+) -> None:
+    """Return identical predictions in evaluation mode."""
+    learned_gate.eval()
+
+    first_output = learned_gate(feature_batch)
+    second_output = learned_gate(feature_batch)
+
+    assert torch.allclose(first_output, second_output)

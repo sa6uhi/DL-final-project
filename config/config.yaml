@@ -148,6 +148,21 @@ transformer:
 hybrid_gating:
   alpha: 0.5
 
+  learned:
+    input_dim: 2
+    hidden_dims: [16, 8]
+    dropout: 0.1
+
+    training:
+      lr: 1.0e-3
+      weight_decay: 1.0e-5
+      epochs: 20
+      batch_size: 256
+      early_stopping_patience: 5
+      min_delta: 1.0e-4
+
+    checkpoint_path: "models/checkpoints/hybrid_gating.pt"
+
 # ---------------------------------------------------------------------------
 # Serving microservice
 # ---------------------------------------------------------------------------

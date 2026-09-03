@@ -16,6 +16,7 @@ normalization makes the two signals scale-comparable before fusion.
 from __future__ import annotations
 
 import torch
+from torch import nn
 
 from src.utils.logger import get_logger
 
@@ -172,3 +173,76 @@ class HybridGate:
     def __call__(self, anomaly_scores: torch.Tensor, probability_ft: torch.Tensor) -> torch.Tensor:
         """Alias for :meth:`fuse` so the gate is callable."""
         return self.fuse(anomaly_scores, probability_ft)
+
+
+class LearnedHybridGate(nn.Module):
+    """Small MLP that learns how to fuse fraud-risk signals.
+
+    Args:
+        input_dim: Number of input risk features.
+        hidden_dims: Width of each hidden layer.
+        dropout: Dropout probability between hidden layers.
+
+    Raises:
+        ValueError: If dimensions or dropout are invalid.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: list[int],
+        dropout: float,
+    ) -> None:
+        """Initialize the learned gating network."""
+        super().__init__()
+
+        if input_dim <= 0:
+            raise ValueError("input_dim must be positive")
+        if not hidden_dims or any(dim <= 0 for dim in hidden_dims):
+            raise ValueError("hidden_dims must contain positive integers")
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError("dropout must be in [0, 1)")
+
+        self.input_dim = input_dim
+        self.hidden_dims = list(hidden_dims)
+        self.dropout = dropout
+
+        layers: list[nn.Module] = []
+        current_dim = input_dim
+
+        for hidden_dim in hidden_dims:
+            layers.extend(
+                [
+                    nn.Linear(current_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(dropout),
+                ]
+            )
+            current_dim = hidden_dim
+
+        layers.append(nn.Linear(current_dim, 1))
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """Return one fraud probability per sample.
+
+        Args:
+            features: Input tensor with shape ``(batch_size, input_dim)``.
+
+        Returns:
+            Fraud probabilities with shape ``(batch_size,)``.
+
+        Raises:
+            ValueError: If the input tensor has an invalid shape or non-finite values.
+        """
+        if features.ndim != 2:
+            raise ValueError(f"features must be 2D, got shape {tuple(features.shape)}")
+
+        if features.shape[1] != self.input_dim:
+            raise ValueError(f"Expected {self.input_dim} input features, got {features.shape[1]}")
+
+        if not torch.isfinite(features).all():
+            raise ValueError("features must contain only finite values")
+
+        logits = self.network(features)
+        return torch.sigmoid(logits).squeeze(-1)
