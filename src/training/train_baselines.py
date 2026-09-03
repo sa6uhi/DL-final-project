@@ -79,7 +79,7 @@ def main() -> None:
 
     logger.info("--- Baseline Training Complete ---")
     for name, scores in results.items():
-        print(f"{name}: PR-AUC = {scores['PR-AUC']:.4f}")
+        logger.info(f"{name}: PR-AUC = {scores['PR-AUC']:.4f}")
 
 
 if __name__ == "__main__":
