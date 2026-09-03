@@ -22,4 +22,5 @@ pythonpath = ["."]
 addopts = "-ra"
 filterwarnings = [
     "error::DeprecationWarning",
+    "ignore::FutureWarning:copyreg",
 ]
