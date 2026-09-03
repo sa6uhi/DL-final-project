@@ -78,6 +78,24 @@ def test_predict_invalid_payload_type_is_422(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_predict_non_finite_features_rejected(client: TestClient) -> None:
+    """NaN or infinite features are rejected by schema validation."""
+    from pydantic import ValidationError
+    from src.serving.schemas import PredictionRequest
+
+    with pytest.raises(ValidationError, match="finite"):
+        PredictionRequest(features=[float("nan")] * 20)
+
+    with pytest.raises(ValidationError, match="finite"):
+        PredictionRequest(features=[float("inf")] * 20)
+
+    raw_payload = '{"features": [' + ", ".join(["NaN"] * 20) + "]}"
+    response = client.post(
+        "/predict", content=raw_payload, headers={"content-type": "application/json"}
+    )
+    assert response.status_code in {400, 422}
+
+
 def test_predict_empty_batch_rejected(client: TestClient) -> None:
     """Stream with no transactions is rejected."""
     response = client.post("/stream", json={"transactions": []})

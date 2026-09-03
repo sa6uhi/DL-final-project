@@ -7,10 +7,11 @@ malformed data.
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Decision = Literal["auto_approve", "auto_block", "escalate"]
 
@@ -38,6 +39,24 @@ class PredictionRequest(BaseModel):
     transaction_id: Optional[str] = Field(default=None, max_length=64)
     card_id: Optional[str] = Field(default=None, max_length=64)
     ft_probability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+    @field_validator("features")
+    @classmethod
+    def validate_finite_features(cls, features: list[float]) -> list[float]:
+        """Ensure all feature values are finite (no NaN or Inf).
+
+        Args:
+            features: List of float values to validate.
+
+        Returns:
+            The validated list of features.
+
+        Raises:
+            ValueError: If any element is NaN or infinite.
+        """
+        if any(not math.isfinite(x) for x in features):
+            raise ValueError("All features must be finite numbers (no NaN or Inf)")
+        return features
 
 
 class StreamRequest(BaseModel):
