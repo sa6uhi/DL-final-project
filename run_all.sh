@@ -54,20 +54,27 @@ else
     echo "==> Autoencoder: processed parquet absent, skipping."
 fi
 
-# 4) Serialize model artifacts (EXIR + ONNX) with parity verification
+# 4) Classical ML baselines (LogReg, RF, LightGBM/XGBoost)
+if [ -f "data/processed/train.parquet" ]; then
+    run "Baseline training" src/training/train_baselines.py
+else
+    echo "==> Baselines: processed parquet absent, skipping."
+fi
+
+# 5) Serialize model artifacts (EXIR + ONNX) with parity verification
 run "Model serialization" src/serving/model_serializer.py --input models/checkpoints/ --output models/artifacts/
 
-# 5) Exp-5 latency & throughput benchmark
+# 6) Exp-5 latency & throughput benchmark
 run "Latency benchmark (Exp-5)" src/evaluation/latency_benchmark.py --config "$CONFIG"
 
-# 6) Exp-6 anomaly evaluation when the scored archive is present
+# 7) Exp-6 anomaly evaluation when the scored archive is present
 if [ -f "data/processed/anomaly_eval.npz" ]; then
     run "Anomaly evaluation (Exp-6)" src/evaluation/dae_anomaly_eval.py --config "$CONFIG" --archive data/processed/anomaly_eval.npz
 else
     echo "==> Anomaly eval: scored archive absent, skipping."
 fi
 
-# 7) Unit test gate (>=80% coverage enforced by pytest)
+# 8) Unit test gate (>=80% coverage enforced by pytest)
 run "Unit test gate" -m pytest --cov=src --cov-fail-under=80 tests/ -q
 
 } 2>&1 | tee "$MAIN_LOG"
