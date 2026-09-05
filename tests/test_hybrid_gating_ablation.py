@@ -13,7 +13,9 @@ from experiments.hybrid_gating_ablation import (
     evaluate_fixed_gate,
     evaluate_learned_gate,
     plot_gate_comparison,
+    plot_gate_disagreement,
 )
+
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
 from src.training.train_hybrid_gating import save_checkpoint
 
@@ -152,3 +154,22 @@ def test_analyze_gate_disagreement_reports_expected_rates() -> None:
     assert np.isclose(metrics["disagreement_rate"], 0.5)
     assert np.isclose(metrics["learned_correct_when_disagree"], 1.0)
     assert np.isclose(metrics["fixed_correct_when_disagree"], 0.0)
+
+
+def test_plot_gate_disagreement_saves_figure(tmp_path: Path) -> None:
+    fixed_scores = np.array([0.1, 0.7, 0.8, 0.3])
+    learned_scores = np.array([0.2, 0.4, 0.9, 0.6])
+    labels = np.array([0, 0, 1, 1])
+
+    output_path = tmp_path / "figures" / "hybrid_gating" / "gate_disagreement.png"
+
+    plot_gate_disagreement(
+        fixed_scores=fixed_scores,
+        learned_scores=learned_scores,
+        labels=labels,
+        output_path=output_path,
+        show_plot=False,
+    )
+
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0

@@ -169,6 +169,79 @@ def analyze_gate_disagreement(
     }
 
 
+def plot_gate_disagreement(
+    fixed_scores: np.ndarray,
+    learned_scores: np.ndarray,
+    labels: np.ndarray,
+    output_path: str | Path,
+    show_plot: bool = True,
+) -> None:
+    """Plot fixed versus learned gate scores to highlight disagreements."""
+    fixed_scores = np.asarray(fixed_scores, dtype=float)
+    learned_scores = np.asarray(learned_scores, dtype=float)
+    labels = np.asarray(labels, dtype=int)
+
+    if fixed_scores.shape != learned_scores.shape:
+        raise ValueError("fixed_scores and learned_scores must have the same shape")
+
+    if fixed_scores.shape != labels.shape:
+        raise ValueError("scores and labels must have the same shape")
+
+    if len(labels) == 0:
+        raise ValueError("evaluation data must not be empty")
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    legitimate_mask = labels == 0
+    fraud_mask = labels == 1
+
+    ax.scatter(
+        fixed_scores[legitimate_mask],
+        learned_scores[legitimate_mask],
+        alpha=0.6,
+        label="Legitimate",
+        color="#A8B5AE",
+    )
+    ax.scatter(
+        fixed_scores[fraud_mask],
+        learned_scores[fraud_mask],
+        alpha=0.7,
+        label="Fraud",
+        color="#3F7D5A",
+    )
+
+    score_min = min(float(fixed_scores.min()), float(learned_scores.min()))
+    score_max = max(float(fixed_scores.max()), float(learned_scores.max()))
+
+    ax.plot(
+        [score_min, score_max],
+        [score_min, score_max],
+        linestyle="--",
+        linewidth=1.5,
+        color="#555555",
+        label="Equal scores",
+    )
+
+    ax.set_xlabel("Fixed Gate Score")
+    ax.set_ylabel("Learned Gate Score")
+    ax.set_title("Hybrid Gate Disagreement Analysis")
+    ax.legend()
+    ax.grid(alpha=0.25)
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    fig.tight_layout()
+    fig.savefig(output, dpi=300, bbox_inches="tight")
+
+    logger.info("Saved gate disagreement figure to %s", output)
+
+    if show_plot:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_gate_comparison(
     fixed_metrics: dict[str, float],
     learned_metrics: dict[str, float],
@@ -312,6 +385,17 @@ def main(argv: list[str] | None = None) -> None:
         fixed_scores=fixed_scores,
         learned_scores=learned_scores,
         labels=bundle["labels"],
+    )
+
+    disagreement_figure_path = (
+        config.get_path("paths.figures") / "hybrid_gating" / "gate_disagreement.png"
+    )
+
+    plot_gate_disagreement(
+        fixed_scores=fixed_scores,
+        learned_scores=learned_scores,
+        labels=bundle["labels"],
+        output_path=disagreement_figure_path,
     )
 
     logger.info(
