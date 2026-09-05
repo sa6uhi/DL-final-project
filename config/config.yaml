@@ -195,9 +195,14 @@ evaluation:
     n_warmup: 10
     n_runs: 200
     batch_sizes: [1, 8, 32, 64]
+
   anomaly_eval:
     max_fpr: 0.01
     alpha_sweep: [0.0, 0.25, 0.5, 0.75, 1.0]
+
+  conformal:
+    alpha: 0.01
+    alpha_sweep: [0.01, 0.025, 0.05, 0.10, 0.20]
 
 # ---------------------------------------------------------------------------
 # Member A: Data Ingestion & Pipeline Configuration
