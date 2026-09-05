@@ -39,7 +39,7 @@ def evaluate_fixed_gate(
     alpha: float,
     percentile: float,
     max_fpr: float,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], np.ndarray]:
     """Evaluate the fixed-alpha hybrid gating baseline.
 
     Args:
@@ -52,7 +52,7 @@ def evaluate_fixed_gate(
         max_fpr: False-positive-rate operating point for TPR reporting.
 
     Returns:
-        Evaluation metrics for the fixed hybrid gate.
+        Tuple containing evaluation metrics and fused prediction scores.
     """
     normalizer = PercentileNormalizer(percentile=percentile).fit(
         torch.as_tensor(calibration_scores, dtype=torch.float32)
@@ -74,7 +74,7 @@ def evaluate_fixed_gate(
 
     logger.info("Fixed gate alpha=%.3f -> %s", alpha, metrics)
 
-    return metrics
+    return metrics, fused_scores.numpy()
 
 
 def evaluate_learned_gate(
@@ -83,7 +83,7 @@ def evaluate_learned_gate(
     labels: np.ndarray,
     checkpoint_path: str | Path,
     max_fpr: float,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], np.ndarray]:
     """Evaluate the trained learned hybrid gate.
 
     Args:
@@ -94,7 +94,7 @@ def evaluate_learned_gate(
         max_fpr: False-positive-rate operating point for TPR reporting.
 
     Returns:
-        Evaluation metrics for the learned hybrid gate.
+        Tuple containing evaluation metrics and learned prediction scores.
     """
     model, normalizer = load_checkpoint(checkpoint_path, device="cpu")
 
@@ -119,7 +119,54 @@ def evaluate_learned_gate(
 
     logger.info("Learned gate -> %s", metrics)
 
-    return metrics
+    return metrics, learned_scores
+
+
+def analyze_gate_disagreement(
+    fixed_scores: np.ndarray,
+    learned_scores: np.ndarray,
+    labels: np.ndarray,
+    threshold: float = 0.5,
+) -> dict[str, float]:
+    """Analyze where fixed and learned gates make different binary decisions."""
+    fixed_scores = np.asarray(fixed_scores, dtype=float)
+    learned_scores = np.asarray(learned_scores, dtype=float)
+    labels = np.asarray(labels, dtype=int)
+
+    if fixed_scores.shape != learned_scores.shape:
+        raise ValueError("fixed_scores and learned_scores must have the same shape")
+
+    if fixed_scores.shape != labels.shape:
+        raise ValueError("scores and labels must have the same shape")
+
+    fixed_predictions = fixed_scores >= threshold
+    learned_predictions = learned_scores >= threshold
+
+    disagreement_mask = fixed_predictions != learned_predictions
+    n_samples = len(labels)
+
+    if n_samples == 0:
+        raise ValueError("evaluation data must not be empty")
+
+    disagreement_rate = float(np.mean(disagreement_mask))
+
+    learned_correct_when_disagree = (
+        np.mean(learned_predictions[disagreement_mask] == labels[disagreement_mask])
+        if disagreement_mask.any()
+        else float("nan")
+    )
+
+    fixed_correct_when_disagree = (
+        np.mean(fixed_predictions[disagreement_mask] == labels[disagreement_mask])
+        if disagreement_mask.any()
+        else float("nan")
+    )
+
+    return {
+        "disagreement_rate": disagreement_rate,
+        "learned_correct_when_disagree": float(learned_correct_when_disagree),
+        "fixed_correct_when_disagree": float(fixed_correct_when_disagree),
+    }
 
 
 def plot_gate_comparison(
@@ -234,7 +281,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     logger.info("Evaluating fixed hybrid gate...")
-    fixed_metrics = evaluate_fixed_gate(
+    fixed_metrics, fixed_scores = evaluate_fixed_gate(
         calibration_scores=bundle["calibration_scores"],
         eval_scores=bundle["eval_scores"],
         probabilities_ft=bundle["probabilities_ft"],
@@ -245,7 +292,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     logger.info("Evaluating learned hybrid gate...")
-    learned_metrics = evaluate_learned_gate(
+    learned_metrics, learned_scores = evaluate_learned_gate(
         eval_scores=bundle["eval_scores"],
         probabilities_ft=bundle["probabilities_ft"],
         labels=bundle["labels"],
@@ -259,6 +306,21 @@ def main(argv: list[str] | None = None) -> None:
         fixed_metrics=fixed_metrics,
         learned_metrics=learned_metrics,
         output_path=figure_path,
+    )
+
+    disagreement_metrics = analyze_gate_disagreement(
+        fixed_scores=fixed_scores,
+        learned_scores=learned_scores,
+        labels=bundle["labels"],
+    )
+
+    logger.info(
+        "Gate disagreement rate: %.4f | "
+        "Learned correct when disagree: %.4f | "
+        "Fixed correct when disagree: %.4f",
+        disagreement_metrics["disagreement_rate"],
+        disagreement_metrics["learned_correct_when_disagree"],
+        disagreement_metrics["fixed_correct_when_disagree"],
     )
 
     logger.info(

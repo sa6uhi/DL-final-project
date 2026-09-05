@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from experiments.hybrid_gating_ablation import (
+    analyze_gate_disagreement,
     evaluate_fixed_gate,
     evaluate_learned_gate,
     plot_gate_comparison,
@@ -37,7 +38,7 @@ def test_evaluate_fixed_gate_returns_expected_metrics() -> None:
         dtype=np.int64,
     )
 
-    metrics = evaluate_fixed_gate(
+    metrics, scores = evaluate_fixed_gate(
         calibration_scores=calibration_scores,
         eval_scores=eval_scores,
         probabilities_ft=probabilities_ft,
@@ -54,6 +55,9 @@ def test_evaluate_fixed_gate_returns_expected_metrics() -> None:
     }
 
     assert all(0.0 <= value <= 1.0 for value in metrics.values())
+
+    assert scores.shape == eval_scores.shape
+    assert np.isfinite(scores).all()
 
 
 def test_evaluate_learned_gate_from_checkpoint(tmp_path: Path) -> None:
@@ -87,7 +91,7 @@ def test_evaluate_learned_gate_from_checkpoint(tmp_path: Path) -> None:
         path=checkpoint_path,
     )
 
-    metrics = evaluate_learned_gate(
+    metrics, scores = evaluate_learned_gate(
         eval_scores=anomaly_scores.numpy(),
         probabilities_ft=probabilities_ft,
         labels=labels,
@@ -102,6 +106,9 @@ def test_evaluate_learned_gate_from_checkpoint(tmp_path: Path) -> None:
     }
 
     assert all(0.0 <= value <= 1.0 for value in metrics.values())
+
+    assert scores.shape == anomaly_scores.numpy().shape
+    assert np.isfinite(scores).all()
 
 
 def test_plot_gate_comparison_saves_figure(tmp_path: Path) -> None:
@@ -128,3 +135,20 @@ def test_plot_gate_comparison_saves_figure(tmp_path: Path) -> None:
 
     assert output_path.exists()
     assert output_path.stat().st_size > 0
+
+
+def test_analyze_gate_disagreement_reports_expected_rates() -> None:
+    fixed_scores = np.array([0.2, 0.7, 0.8, 0.3])
+    learned_scores = np.array([0.2, 0.4, 0.9, 0.6])
+    labels = np.array([0, 0, 1, 1])
+
+    metrics = analyze_gate_disagreement(
+        fixed_scores=fixed_scores,
+        learned_scores=learned_scores,
+        labels=labels,
+        threshold=0.5,
+    )
+
+    assert np.isclose(metrics["disagreement_rate"], 0.5)
+    assert np.isclose(metrics["learned_correct_when_disagree"], 1.0)
+    assert np.isclose(metrics["fixed_correct_when_disagree"], 0.0)
