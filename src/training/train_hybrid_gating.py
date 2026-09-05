@@ -12,6 +12,8 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
+from src.training.trainer_utils import EarlyStopping, resolve_device
+from src.utils.config import Config
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,6 +28,16 @@ class GateData:
     anomaly_scores: torch.Tensor
     ft_probabilities: torch.Tensor
     labels: torch.Tensor
+
+
+@dataclass(frozen=True)
+class GateTrainingHistory:
+    """Loss history recorded during learned-gate training."""
+
+    train_losses: list[float]
+    val_losses: list[float]
+    best_epoch: int
+    best_val_loss: float
 
 
 def validate_gate_data(data: GateData, name: str = "gate_data") -> None:
@@ -210,6 +222,7 @@ def save_checkpoint(
     model: LearnedHybridGate,
     normalizer: PercentileNormalizer,
     path: str | Path,
+    history: GateTrainingHistory | None = None,
 ) -> None:
     """Save learned gate weights, architecture metadata, and normalizer state.
 
@@ -217,6 +230,7 @@ def save_checkpoint(
         model: Trained learned hybrid gate.
         normalizer: Fitted anomaly-score normalizer.
         path: Destination checkpoint path.
+        history: Optional training-loss history to store in the checkpoint.
     """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -230,6 +244,13 @@ def save_checkpoint(
         },
         "normalizer": normalizer.state_dict(),
     }
+    if history is not None:
+        payload["training_history"] = {
+            "train_losses": history.train_losses,
+            "val_losses": history.val_losses,
+            "best_epoch": history.best_epoch,
+            "best_val_loss": history.best_val_loss,
+        }
 
     torch.save(payload, out)
     logger.info("Saved learned hybrid gate checkpoint to %s", out)
@@ -282,5 +303,228 @@ def load_checkpoint(
     model.eval()
 
     normalizer = PercentileNormalizer.from_state_dict(normalizer_state)
+
+    return model, normalizer
+
+
+def train_gate(
+    train_data: GateData,
+    val_data: GateData,
+    config: Config,
+    device: str | None = None,
+) -> tuple[LearnedHybridGate, PercentileNormalizer]:
+    """Train the learned hybrid gate end-to-end and save its checkpoint.
+
+    Args:
+        train_data: Training split signals and fraud labels.
+        val_data: Validation split signals and fraud labels, used for
+            early stopping and picking the best model weights.
+        config: Central project configuration.
+        device: Device to train on; auto-detected when ``None``.
+
+    Returns:
+        Tuple of the trained gate (best weights restored) and the
+        normalizer fitted on the training split.
+
+    Raises:
+        ValueError: If the input data fails validation, or if the built
+            gate features do not match the configured ``input_dim``.
+    """
+    validate_gate_data(train_data, name="train_data")
+    validate_gate_data(val_data, name="val_data")
+
+    training_config = config.hybrid_gating.learned.training
+
+    seed = int(config.seed)
+
+    epochs = int(training_config.epochs)
+    batch_size = int(training_config.batch_size)
+    learning_rate = float(training_config.lr)
+    weight_decay = float(training_config.weight_decay)
+    patience = int(training_config.early_stopping_patience)
+    min_delta = float(training_config.min_delta)
+
+    if epochs <= 0:
+        raise ValueError("Training epochs must be positive")
+
+    if batch_size <= 0:
+        raise ValueError("Training batch_size must be positive")
+
+    if learning_rate <= 0.0:
+        raise ValueError("Training learning rate must be positive")
+
+    if weight_decay < 0.0:
+        raise ValueError("Training weight_decay must be non-negative")
+
+    if patience <= 0:
+        raise ValueError("Early stopping patience must be positive")
+
+    if min_delta < 0.0:
+        raise ValueError("Early stopping min_delta must be non-negative")
+
+    torch.manual_seed(seed)
+
+    resolved_device = resolve_device(device)
+
+    normalizer = PercentileNormalizer(
+        percentile=float(config.hybrid_gating.learned.normalize_percentile)
+    )
+
+    train_features = build_gate_features(
+        anomaly_scores=train_data.anomaly_scores,
+        transformer_probabilities=train_data.ft_probabilities,
+        normalizer=normalizer,
+        fit_normalizer=True,
+    )
+
+    val_features = build_gate_features(
+        anomaly_scores=val_data.anomaly_scores,
+        transformer_probabilities=val_data.ft_probabilities,
+        normalizer=normalizer,
+        fit_normalizer=False,
+    )
+
+    model = LearnedHybridGate(
+        input_dim=int(config.hybrid_gating.learned.input_dim),
+        hidden_dims=[int(dim) for dim in config.hybrid_gating.learned.hidden_dims],
+        dropout=float(config.hybrid_gating.learned.dropout),
+    ).to(resolved_device)
+
+    if train_features.shape[1] != model.input_dim:
+        raise ValueError(
+            "Generated training gate feature count does not match "
+            "configured input_dim: "
+            f"{train_features.shape[1]} != {model.input_dim}"
+        )
+
+    if val_features.shape[1] != model.input_dim:
+        raise ValueError(
+            "Generated validation gate feature count does not match "
+            "configured input_dim: "
+            f"{val_features.shape[1]} != {model.input_dim}"
+        )
+
+    train_loader = make_gate_loader(
+        features=train_features,
+        labels=train_data.labels,
+        batch_size=batch_size,
+        shuffle=True,
+    )
+
+    val_loader = make_gate_loader(
+        features=val_features,
+        labels=val_data.labels,
+        batch_size=batch_size,
+        shuffle=False,
+    )
+
+    loss_fn = nn.BCELoss()
+
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=learning_rate,
+        weight_decay=weight_decay,
+    )
+
+    early_stopping = EarlyStopping(
+        patience=patience,
+        min_delta=min_delta,
+        mode="min",
+    )
+
+    train_losses: list[float] = []
+    val_losses: list[float] = []
+    best_epoch = 0
+
+    # Training loop
+    for epoch in range(epochs):
+        model.train()
+
+        total_train_loss = 0.0
+        total_train_samples = 0
+
+        for features, labels in train_loader:
+            features = features.to(resolved_device)
+            labels = labels.to(resolved_device)
+
+            optimizer.zero_grad()
+
+            predictions = model(features)
+
+            loss = loss_fn(
+                predictions,
+                labels,
+            )
+
+            loss.backward()
+
+            optimizer.step()
+
+            batch_samples = features.shape[0]
+            total_train_loss += loss.item() * batch_samples
+            total_train_samples += batch_samples
+
+        train_loss = total_train_loss / total_train_samples
+
+        # Validation
+        val_loss = evaluate_gate_loss(
+            model=model,
+            data_loader=val_loader,
+            loss_fn=loss_fn,
+            device=resolved_device,
+        )
+
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+
+        early_stopping.update(
+            val_loss,
+            model,
+        )
+
+        if early_stopping.best_score == val_loss:
+            best_epoch = epoch + 1
+
+        logger.info(
+            "Gate epoch %d/%d - train loss: %.6f - validation loss: %.6f",
+            epoch + 1,
+            epochs,
+            train_loss,
+            val_loss,
+        )
+
+        if early_stopping.should_stop:
+            logger.info(
+                "Early stopping triggered at epoch %d",
+                epoch + 1,
+            )
+            break
+
+    # Restore the best model weights
+    early_stopping.restore(model)
+
+    history = GateTrainingHistory(
+        train_losses=train_losses,
+        val_losses=val_losses,
+        best_epoch=best_epoch,
+        best_val_loss=float(early_stopping.best_score),
+    )
+
+    model.eval()
+
+    # Save trained gate checkpoint
+    checkpoint_path = Path(config.hybrid_gating.learned.checkpoint_path)
+
+    save_checkpoint(
+        model=model,
+        normalizer=normalizer,
+        path=checkpoint_path,
+        history=history,
+    )
+
+    logger.info(
+        "Finished learned gate training. " "Best validation loss: %.6f",
+        early_stopping.best_score,
+    )
 
     return model, normalizer

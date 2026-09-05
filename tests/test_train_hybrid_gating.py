@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 
+from src.utils.config import Config
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
 from src.training.train_hybrid_gating import (
     GateData,
@@ -15,6 +16,7 @@ from src.training.train_hybrid_gating import (
     make_gate_loader,
     save_checkpoint,
     validate_gate_data,
+    train_gate,
 )
 
 
@@ -169,3 +171,55 @@ def test_evaluate_gate_loss_returns_finite_value() -> None:
 
     assert loss >= 0.0
     assert torch.isfinite(torch.tensor(loss))
+
+
+def test_train_gate_trains_and_saves_checkpoint(tmp_path: Path) -> None:
+    """Training should return an eval-mode gate and save its checkpoint."""
+    config = Config(
+        {
+            "seed": 42,
+            "hybrid_gating": {
+                "learned": {
+                    "input_dim": 2,
+                    "hidden_dims": [8],
+                    "dropout": 0.0,
+                    "normalize_percentile": 99.0,
+                    "training": {
+                        "lr": 1.0e-2,
+                        "weight_decay": 0.0,
+                        "epochs": 5,
+                        "batch_size": 4,
+                        "early_stopping_patience": 3,
+                        "min_delta": 0.0,
+                    },
+                    "checkpoint_path": str(tmp_path / "hybrid_gating.pt"),
+                }
+            },
+        }
+    )
+
+    train_data = GateData(
+        anomaly_scores=torch.tensor([0.1, 0.2, 0.3, 0.4, 2.0, 2.2, 2.4, 2.6]),
+        ft_probabilities=torch.tensor([0.05, 0.10, 0.15, 0.20, 0.80, 0.85, 0.90, 0.95]),
+        labels=torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+    )
+
+    val_data = GateData(
+        anomaly_scores=torch.tensor([0.15, 0.35, 2.1, 2.5]),
+        ft_probabilities=torch.tensor([0.10, 0.20, 0.82, 0.92]),
+        labels=torch.tensor([0, 0, 1, 1]),
+    )
+
+    model, normalizer = train_gate(
+        train_data=train_data,
+        val_data=val_data,
+        config=config,
+        device="cpu",
+    )
+
+    checkpoint_path = Path(config.hybrid_gating.learned.checkpoint_path)
+
+    assert isinstance(model, LearnedHybridGate)
+    assert isinstance(normalizer, PercentileNormalizer)
+    assert not model.training
+    assert checkpoint_path.is_file()
