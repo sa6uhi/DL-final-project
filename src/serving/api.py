@@ -335,7 +335,7 @@ class Scorer:
             from src.explainability.shap_explainer import explain_transaction  # type: ignore
 
             has_shap = True
-        except ImportError, AttributeError:
+        except (ImportError, AttributeError):
             pass
 
         if has_shap:
@@ -383,7 +383,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.config = cfg
     app.state.scorer = build_scorer(cfg)
     app.state.start_time = time.perf_counter()
-    app.state.latencies: deque[float] = deque(maxlen=MAX_LATENCY_SAMPLES)
+    app.state.latencies = deque(maxlen=MAX_LATENCY_SAMPLES)
     app.state.requests_total = 0
     app.state.errors_total = 0
 
