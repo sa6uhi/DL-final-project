@@ -185,8 +185,7 @@ def build_warmup_cosine_scheduler(
 
 
 def resolve_device(requested: str | None = None) -> str:
-    """Resolve a device string, degrading to CPU when CUDA is unavailable.
-    """
+    """Resolve a device string, degrading to CPU when CUDA is unavailable."""
     if requested is None:
         return "cuda" if torch.cuda.is_available() else "cpu"
     if requested.startswith("cuda") and not torch.cuda.is_available():
@@ -205,8 +204,7 @@ class AmpPolicy:
     """
 
     def __init__(self, device: str, requested: bool = True) -> None:
-        """Decide whether AMP can actually be used on ``device``.
-        """
+        """Decide whether AMP can actually be used on ``device``."""
         self.device_type = torch.device(device).type
         self.enabled = bool(requested) and self.device_type == "cuda"
         self.scaler: torch.amp.GradScaler | None = (
@@ -222,8 +220,7 @@ class AmpPolicy:
         return torch.amp.autocast(self.device_type)
 
     def backward(self, loss: torch.Tensor) -> None:
-        """Run the backward pass, scaling the loss when AMP is active.
-        """
+        """Run the backward pass, scaling the loss when AMP is active."""
         if self.scaler is not None:
             self.scaler.scale(loss).backward()
         else:
