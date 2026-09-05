@@ -234,7 +234,10 @@ def verify_parity(
     sample: torch.Tensor,
     tolerance: float = PARITY_TOLERANCE,
 ) -> float:
-    """Measure maximum absolute output difference between two scoriing paths.
+    """Measure maximum absolute output difference between two scoring paths.
+
+    Enforces a strict absolute tolerance bound ``|y_ref - y_art| <= tolerance``
+    with zero scale-dependent inflation.
 
     Args:
         reference: Original PyTorch model.
@@ -247,19 +250,20 @@ def verify_parity(
         The observed maximum absolute difference.
 
     Raises:
-        RuntimeError: If the difference exceeds ``tolerance``.
+        RuntimeError: If the maximum absolute difference exceeds ``tolerance``.
     """
     reference.eval()
     with torch.no_grad():
         y_ref = reference(sample)
         y_art = artifact(sample) if callable(artifact) else artifact
     max_diff = float((y_ref - y_art).abs().max().item())
-    effective_tol = tolerance * float(max(1.0, y_ref.abs().max().item()))
-    if max_diff > effective_tol:
-        raise RuntimeError(
-            f"Serialization parity failed: max diff {max_diff:.2e} > {effective_tol:.2e}"
+    if max_diff > tolerance:
+        msg = (
+            f"Serialization parity failed: max diff {max_diff:.2e} > "
+            f"strict tolerance {tolerance:.2e}"
         )
-    logger.info("Parity verified: max diff %.6e (tol %.1e)", max_diff, effective_tol)
+        raise RuntimeError(msg)
+    logger.info("Parity verified: max diff %.6e (strict tol %.1e)", max_diff, tolerance)
     return max_diff
 
 

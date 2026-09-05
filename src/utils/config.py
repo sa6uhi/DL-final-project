@@ -10,6 +10,7 @@ configurations remain portable between machines.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -139,8 +140,6 @@ class Config(dict):
         for segment in key.split("."):
             if isinstance(result, dict) and segment in result:
                 result = result[segment]
-            elif isinstance(result, Config) and segment in result:
-                result = result[segment]
             else:
                 return default
         return result
@@ -199,10 +198,11 @@ class Config(dict):
 
 
 def load_config(path: str | Path | None = None) -> Config:
-    """Load the YAML configuration from ``path``.
+    """Load the YAML configuration from ``path`` or ``CONFIG_PATH`` env var.
 
     Args:
         path: Path to the YAML configuration file. Defaults to
+            the ``CONFIG_PATH`` environment variable if set, otherwise
             ``config/config.yaml`` relative to the repository root.
 
     Returns:
@@ -212,8 +212,11 @@ def load_config(path: str | Path | None = None) -> Config:
         FileNotFoundError: If the configuration file does not exist.
         yaml.YAMLError: If the file cannot be parsed as YAML.
     """
-    config_path = Path(path) if path is not None else DEFAULT_CONFIG_PATH
-    config_path = config_path.resolve()
+    if path is not None:
+        target = path
+    else:
+        target = os.environ.get("CONFIG_PATH") or DEFAULT_CONFIG_PATH
+    config_path = Path(target).resolve()
     if not config_path.is_file():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
     with open(config_path, "r", encoding="utf-8") as fh:

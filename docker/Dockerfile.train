@@ -22,5 +22,5 @@ RUN chmod +x run_all.sh && useradd --system --uid 10001 --create-home appuser
 
 USER appuser
 VOLUME ["/app/models", "/app/logs"]
-ENTRYPOINT ["sh"]
+ENTRYPOINT ["/bin/bash"]
 CMD ["run_all.sh"]

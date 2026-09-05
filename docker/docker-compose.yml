@@ -4,6 +4,7 @@
 
 services:
   api:
+    image: ghcr.io/sa6uhi/dl-final-project-api:v1.0-final
     build:
       context: ..
       dockerfile: docker/Dockerfile.infer
@@ -25,13 +26,14 @@ services:
 
   train:
     profiles: ["train"]
+    image: ghcr.io/sa6uhi/dl-final-project-train:v1.0-final
     build:
       context: ..
       dockerfile: docker/Dockerfile.train
     environment:
       - CONFIG_PATH=/app/config/config.yaml
     volumes:
-      - ../data:/data
+      - ../data:/app/data
       - ../models:/app/models
       - ../logs:/app/logs
     command: ["run_all.sh"]

@@ -149,3 +149,35 @@ def test_export_all_cli_main(tmp_path: Path, monkeypatch) -> None:
     )
     assert (out_dir / "autoencoder.pt2").exists()
     assert (out_dir / "autoencoder.onnx").exists()
+
+
+def test_reference_anomaly_score_reductions(
+    ref_model: ReferenceEncoder, sample_batch: torch.Tensor
+) -> None:
+    """mean/sum reductions aggregate the per-sample reference scores."""
+    with torch.no_grad():
+        scores = ref_model.anomaly_score(sample_batch)
+        mean_score = ref_model.anomaly_score(sample_batch, reduction="mean")
+        sum_score = ref_model.anomaly_score(sample_batch, reduction="sum")
+    assert float(mean_score) == pytest.approx(float(scores.mean()))
+    assert float(sum_score) == pytest.approx(float(scores.sum()))
+
+
+def test_resolve_model_prefers_trained_checkpoint(tmp_path: Path) -> None:
+    """_resolve_model loads the trained DAE when autoencoder.pt is present."""
+    from src.models.autoencoder import DenoisingAutoencoder
+    from src.serving.model_serializer import _resolve_model
+    from src.training.train_autoencoder import save_checkpoint
+
+    torch.manual_seed(0)
+    model = DenoisingAutoencoder(input_dim=8, encoder_hidden_dims=[4], latent_dim=2)
+    model.eval()
+    input_dir = tmp_path / "checkpoints"
+    input_dir.mkdir()
+    save_checkpoint(model, input_dir / "autoencoder.pt")
+
+    resolved, source = _resolve_model(input_dir, {"autoencoder": {"input_dim": 8}})
+
+    assert source == input_dir / "autoencoder.pt"
+    sample = torch.randn(2, 8)
+    assert torch.allclose(resolved.anomaly_score(sample), model.anomaly_score(sample), atol=1e-6)

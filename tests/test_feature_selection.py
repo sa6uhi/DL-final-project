@@ -19,13 +19,13 @@ import pytest
 from src.training.feature_selection import (
     FeatureSpec,
     _continuous_candidates,
-    _stratified_indices,
     build_feature_spec,
     compute_cardinalities,
     infer_column_roles,
     load_column_roles,
     rank_features_by_mi,
     resolve_feature_set,
+    stratified_indices,
 )
 from src.utils.config import Config
 
@@ -163,16 +163,16 @@ def test_continuous_candidates_appends_missingness_masks(
 def test_stratified_indices_returns_all_when_not_downsampling() -> None:
     """A quota at or above the population keeps every row."""
     labels = np.array([0, 1, 0, 1])
-    assert np.array_equal(_stratified_indices(labels, 10, 42), np.arange(4))
-    assert np.array_equal(_stratified_indices(labels, 0, 42), np.arange(4))
+    assert np.array_equal(stratified_indices(labels, 10, 42), np.arange(4))
+    assert np.array_equal(stratified_indices(labels, 0, 42), np.arange(4))
 
 
 def test_stratified_indices_keeps_both_classes_and_is_deterministic() -> None:
     """The minority class survives downsampling and draws are reproducible."""
     labels = np.zeros(1000, dtype=np.int64)
     labels[:20] = 1
-    first = _stratified_indices(labels, 100, 42)
-    assert np.array_equal(first, _stratified_indices(labels, 100, 42))
+    first = stratified_indices(labels, 100, 42)
+    assert np.array_equal(first, stratified_indices(labels, 100, 42))
     assert labels[first].sum() > 0
     assert first.size <= 105
 
