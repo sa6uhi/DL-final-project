@@ -167,7 +167,7 @@ def infer_column_roles(
     return continuous, categorical
 
 
-def _stratified_indices(labels: np.ndarray, sample_size: int, seed: int) -> np.ndarray:
+def stratified_indices(labels: np.ndarray, sample_size: int, seed: int) -> np.ndarray:
     """Draw a class-proportional row sample without replacement."""
     n_rows = labels.shape[0]
     if sample_size <= 0 or sample_size >= n_rows:
@@ -211,7 +211,7 @@ def rank_features_by_mi(
     if np.unique(labels).size < 2:
         raise ValueError("mutual information requires both classes in the split")
 
-    idx = _stratified_indices(labels, sample_size, seed)
+    idx = stratified_indices(labels, sample_size, seed)
     matrix = df.iloc[idx][present].to_numpy(dtype=np.float64, copy=True)
     matrix = np.nan_to_num(matrix, nan=0.0, posinf=0.0, neginf=0.0)
     sampled_labels = labels[idx]
