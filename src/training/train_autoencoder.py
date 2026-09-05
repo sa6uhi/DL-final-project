@@ -53,16 +53,24 @@ def _make_loader(
     )
 
 
-def save_checkpoint(model: DenoisingAutoencoder, path: str | Path) -> None:
-    """Persist model weights and architecture metadata to disk.
+def save_checkpoint(
+    model: DenoisingAutoencoder,
+    path: str | Path,
+    calibrated_const: float | None = None,
+) -> None:
+    """Persist model weights, architecture metadata, and calibration to disk.
 
     Args:
         model: Trained autoencoder instance.
         path: Destination ``.pt`` checkpoint path.
+        calibrated_const: Optional median validation residual for probability scaling.
     """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"state_dict": model.state_dict(), "meta": model.state_meta()}, out)
+    payload: dict[str, Any] = {"state_dict": model.state_dict(), "meta": model.state_meta()}
+    if calibrated_const is not None:
+        payload["calibrated_const"] = float(calibrated_const)
+    torch.save(payload, out)
     logger.info("Saved autoencoder checkpoint to %s", out)
 
 
@@ -89,6 +97,8 @@ def load_checkpoint(path: str | Path, device: str = "cpu") -> DenoisingAutoencod
         raise KeyError(f"Checkpoint {ckpt_path} has no architecture metadata")
     model = DenoisingAutoencoder(**meta)
     model.load_state_dict(payload["state_dict"])
+    if "calibrated_const" in payload:
+        setattr(model, "calibrated_const", float(payload["calibrated_const"]))
     model.eval()
     return model
 
@@ -144,6 +154,10 @@ def train_autoencoder(
     train_tensor = _to_tensor(train_x)
     if train_tensor.dim() != 2 or train_tensor.size(0) == 0:
         raise ValueError(f"train_x must be a non-empty 2D array, got {tuple(train_tensor.shape)}")
+    if train_tensor.size(1) != int(acfg.input_dim):
+        raise ValueError(
+            f"Feature dim mismatch: expected {acfg.input_dim}, got {train_tensor.size(1)}"
+        )
 
     if val_x is not None:
         val_tensor = _to_tensor(val_x)
@@ -209,7 +223,8 @@ def train_autoencoder(
                 bce_weight=float(loss_cfg.bce_weight),
             )
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+            grad_clip = float(getattr(train_cfg, "grad_clip", 5.0))
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
             optimizer.step()
             epoch_loss += loss.item() * x.size(0)
         scheduler.step()
@@ -236,7 +251,17 @@ def train_autoencoder(
     if best_state is not None:
         model.load_state_dict(best_state)
     model.eval()
-    save_checkpoint(model, out_path)
+
+    calibrated_const = None
+    with torch.no_grad():
+        val_eval_scores = model.anomaly_score(val_tensor.to(device)).cpu().numpy()
+        calibrated_const = float(np.median(val_eval_scores))
+        logger.info(
+            "Calibrated anomaly score constant from validation residuals: %.2f",
+            calibrated_const,
+        )
+
+    save_checkpoint(model, out_path, calibrated_const=calibrated_const)
     logger.info("Training complete | best val_loss %.5f", best_loss)
     return model
 
@@ -300,11 +325,11 @@ def _load_legit_features(
     if not file_path.is_file():
         raise FileNotFoundError(f"Data split not found: {file_path}")
 
+    from pandas.api.types import is_numeric_dtype
+
     df = pd.read_parquet(file_path)
     numeric_cols = [
-        col
-        for col in df.columns
-        if col not in non_feature_cols and df[col].dtype in ("float64", "float32", "int64", "int32")
+        col for col in df.columns if col not in non_feature_cols and is_numeric_dtype(df[col].dtype)
     ]
     if not numeric_cols:
         raise ValueError(f"No numeric feature columns found in {file_path}")

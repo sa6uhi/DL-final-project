@@ -226,13 +226,14 @@ def test_state_meta_roundtrip(ae: DenoisingAutoencoder) -> None:
 
 
 def test_save_and_load_checkpoint(ae: DenoisingAutoencoder, tmp_path: Path) -> None:
-    """Checkpointed weights survive a save/load roundtrip."""
+    """Checkpointed weights survive a save/load roundtrip with optional calibrated_const."""
     ae.eval()
     ckpt = tmp_path / "ae.pt"
-    save_checkpoint(ae, ckpt)
+    save_checkpoint(ae, ckpt, calibrated_const=42.5)
     loaded = load_checkpoint(ckpt)
     x = torch.randn(4, ae.input_dim)
     assert torch.allclose(ae(x), loaded(x))
+    assert getattr(loaded, "calibrated_const", None) == 42.5
 
 
 def test_load_missing_checkpoint_raises(tmp_path: Path) -> None:
@@ -370,6 +371,13 @@ def test_train_rejects_bad_dimensions(tmp_path: Path) -> None:
         train_autoencoder(np.zeros(8, dtype=np.float32), cfg, device="cpu")
     with pytest.raises(ValueError):
         train_autoencoder(np.zeros((0, 8), dtype=np.float32), cfg, device="cpu")
+
+
+def test_train_rejects_feature_dimension_mismatch(tmp_path: Path) -> None:
+    """Feature dimension not matching config.autoencoder.input_dim raises ValueError."""
+    cfg = _tiny_train_config(tmp_path)
+    with pytest.raises(ValueError, match="Feature dim mismatch"):
+        train_autoencoder(np.zeros((10, 10), dtype=np.float32), cfg, device="cpu")
 
 
 def test_train_splits_validation_when_val_missing(tmp_path: Path) -> None:
