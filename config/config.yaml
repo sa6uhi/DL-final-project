@@ -239,3 +239,7 @@ sequence:
 
 features:
   target_col: "isFraud"
+
+
+explainability:
+  shap_background_size: 50

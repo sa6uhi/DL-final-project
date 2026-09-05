@@ -322,9 +322,11 @@ def test_explain_delegates_to_shap_when_available(
     import types
 
     fake_mod = types.ModuleType("src.explainability.shap_explainer")
-    fake_mod.explain_transaction = lambda feats, top_k=5, ft_probability=None: [  # type: ignore
-        {"feature_name": "Amount", "attribution": 0.42, "value": 150.0}
-    ]
+    fake_mod.explain_transaction = (
+        lambda feats, model=None, background=None, top_k=5, ft_probability=None, l1_gamma=0.4: [
+            {"feature_name": "Amount", "attribution": 0.42, "value": 150.0}
+        ]
+    )
     monkeypatch.setitem(sys.modules, "src.explainability.shap_explainer", fake_mod)
 
     response = client.post("/explain", json={"features": features, "top_k": 1})
