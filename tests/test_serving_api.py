@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -126,7 +127,8 @@ def test_metrics_tracks_requests_and_latency(client: TestClient, features: list[
     body = response.json()
     assert body["requests_total"] == 2
     assert body["avg_latency_ms"] >= 0.0
-    assert body["p99_latency_ms"] >= body["avg_latency_ms"]
+    assert body["p90_latency_ms"] >= 0.0
+    assert body["p99_latency_ms"] >= body["p90_latency_ms"]
     assert body["errors_total"] == 0
 
 
@@ -403,10 +405,28 @@ def test_serving_require_checkpoint_raises_when_missing(
 
 
 def test_metrics_p99_matches_numpy(client: TestClient) -> None:
-    """Metrics P99 uses numpy.percentile calculation."""
+    """Metrics P90 and P99 use numpy.percentile calculation."""
     client.app.state.latencies = [1.0, 2.0, 3.0, 10.0, 100.0]
     response = client.get("/metrics")
     assert response.status_code == 200
     data = response.json()
+    expected_p90 = float(np.percentile([1.0, 2.0, 3.0, 10.0, 100.0], 90))
     expected_p99 = float(np.percentile([1.0, 2.0, 3.0, 10.0, 100.0], 99))
+    assert data["p90_latency_ms"] == pytest.approx(expected_p90)
     assert data["p99_latency_ms"] == pytest.approx(expected_p99)
+
+
+def test_build_scorer_uses_calibrated_const(
+    config: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """build_scorer extracts calibrated_const from model when available."""
+    from src.serving.api import build_reference_model, build_scorer
+
+    model = build_reference_model(input_dim=int(config.autoencoder.input_dim))
+    setattr(model, "calibrated_const", 33.3)
+    ckpt = tmp_path / "dummy_ae.pt"
+    ckpt.touch()
+    monkeypatch.setattr("src.serving.api.load_checkpoint", lambda _: model)
+    monkeypatch.setattr(config.serving, "model_path", str(ckpt))
+    scorer = build_scorer(config)
+    assert scorer.anomaly_const == 33.3

@@ -46,10 +46,11 @@ autoencoder:
     early_stopping_patience: 6
     min_delta: 1.0e-4
     val_check_interval_epochs: 1
+    grad_clip: 5.0
 
   loss:
-    mse_weight: 0.5
-    bce_weight: 0.5
+    mse_weight: 1.0
+    bce_weight: 0.0  # 0.0 for unbounded RobustScaled features; BCE regularizer requires [0, 1] bounded inputs
 
   anomaly_score:
     l1_gamma: 0.4
@@ -179,7 +180,7 @@ serving:
   model_path: "models/checkpoints/autoencoder.pt"
   transformer_path: "models/checkpoints/ft_transformer.pt"
   max_history: 10000
-  anomaly_const: 2.0
+  anomaly_const: 50.0
 
 scoring:
   approve_threshold: 0.15

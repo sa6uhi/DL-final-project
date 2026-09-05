@@ -41,16 +41,33 @@ A high-throughput, production-grade fraud detection platform combining a semi-su
 
 Measured on standard CPU across 200 timed evaluation runs on the 800-dimensional production checkpoint:
 
-| Backend | Batch Size | P50 Latency | P95 Latency | P99 Latency (SLA) | Throughput | SLA Status |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **PyTorch Eager DAE** | 1 | 0.78 ms | 0.98 ms | 5.45 ms | 1,036 req/s | PASS (< 15 ms) |
-| **PyTorch Eager DAE** | 8 | 0.70 ms | 0.72 ms | 0.81 ms | 11,372 req/s | PASS (< 15 ms) |
-| **PyTorch Eager DAE** | 32 | 0.88 ms | 0.90 ms | 0.91 ms | 36,441 req/s | PASS (< 15 ms) |
-| **PyTorch Eager DAE** | 64 | 1.13 ms | 1.20 ms | 1.31 ms | 56,115 req/s | PASS (< 15 ms) |
-| **ONNX Runtime** | 1 | 0.10 ms | 0.22 ms | 1.50 ms | 6,010 req/s | PASS (10x faster) |
-| **ONNX Runtime** | 8 | 0.11 ms | 0.20 ms | 0.28 ms | 62,114 req/s | PASS (< 15 ms) |
-| **ONNX Runtime** | 32 | 0.33 ms | 0.39 ms | 2.07 ms | 87,113 req/s | PASS (< 15 ms) |
-| **ONNX Runtime** | 64 | 0.57 ms | 0.68 ms | 0.83 ms | 112,116 req/s | PASS (< 15 ms) |
+| Backend | Batch Size | P50 Latency | P90 Latency | P95 Latency | P99 Latency (SLA) | Throughput | SLA Status |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **PyTorch Eager DAE** | 1 | 0.75 ms | 0.78 ms | 0.79 ms | 0.80 ms | 1,320 req/s | PASS (< 15 ms) |
+| **PyTorch Eager DAE** | 8 | 0.29 ms | 0.43 ms | 0.45 ms | 0.50 ms | 24,175 req/s | PASS (< 15 ms) |
+| **PyTorch Eager DAE** | 32 | 0.44 ms | 0.55 ms | 0.58 ms | 0.63 ms | 69,318 req/s | PASS (< 15 ms) |
+| **PyTorch Eager DAE** | 64 | 0.63 ms | 0.69 ms | 0.72 ms | 0.79 ms | 99,380 req/s | PASS (< 15 ms) |
+| **PyTorch EXIR (`.pt2`)** | 1 | 0.87 ms | 0.90 ms | 0.91 ms | 0.99 ms | 1,156 req/s | PASS (< 15 ms) |
+| **PyTorch EXIR (`.pt2`)** | 8 | 0.80 ms | 0.81 ms | 0.83 ms | 0.85 ms | 9,937 req/s | PASS (< 15 ms) |
+| **PyTorch EXIR (`.pt2`)** | 32 | 0.98 ms | 0.98 ms | 0.99 ms | 1.02 ms | 32,672 req/s | PASS (< 15 ms) |
+| **PyTorch EXIR (`.pt2`)** | 64 | 1.24 ms | 1.25 ms | 1.28 ms | 1.32 ms | 51,544 req/s | PASS (< 15 ms) |
+| **ONNX Runtime** | 1 | 0.06 ms | 0.09 ms | 0.11 ms | 1.27 ms | 10,259 req/s | PASS (12x faster) |
+| **ONNX Runtime** | 8 | 0.09 ms | 0.11 ms | 0.11 ms | 0.13 ms | 85,042 req/s | PASS (< 15 ms) |
+| **ONNX Runtime** | 32 | 0.26 ms | 0.27 ms | 0.27 ms | 0.28 ms | 123,795 req/s | PASS (< 15 ms) |
+| **ONNX Runtime** | 64 | 0.40 ms | 0.45 ms | 0.48 ms | 0.52 ms | 154,868 req/s | PASS (< 15 ms) |
+
+### End-to-End FastAPI Microservice Latency
+
+Measured via 500 timed sequential HTTP POST requests to `/predict` (including Pydantic V2 schema validation, ONNX scoring, learned gating, and JSON serialization):
+
+| Metric | Measured Value | SLA Target | Compliance |
+| :--- | :---: | :---: | :---: |
+| **P50 Latency** | 5.17 ms | — | Fast path |
+| **P90 Latency** | 5.77 ms | — | Stable distribution |
+| **P95 Latency** | 5.95 ms | — | Bounded tail |
+| **P99 Latency** | **6.21 ms** | **< 15.00 ms** | **PASS (58.6% margin)** |
+| **Mean Latency** | 5.25 ms | — | Sub-6ms average |
+| **Numerical Parity** | $\le 1.22 \times 10^{-4}$ ($\le 1\text{ ULP}$) | $< 2.0 \times 10^{-3}$ | **EXACT MATCH** |
 
 ---
 

@@ -18,7 +18,7 @@ from typing import Any, Callable
 import numpy as np
 import torch
 
-from src.serving.model_serializer import ReferenceEncoder
+from src.serving.model_serializer import ReferenceEncoder, load_exir
 from src.training.train_autoencoder import load_checkpoint
 from src.utils.config import load_config
 from src.utils.logger import get_logger
@@ -34,6 +34,7 @@ class LatencyStats:
     batch_size: int
     n_runs: int
     p50_ms: float
+    p90_ms: float
     p95_ms: float
     p99_ms: float
     mean_ms: float
@@ -78,13 +79,14 @@ def measure_latency(
                 raise ValueError("Scoring function must return one row per input sample")
             timings_ms.append((time.perf_counter() - start) * 1000.0)
     arr = np.asarray(timings_ms, dtype=np.float64)
-    p50, p95, p99 = (float(v) for v in np.percentile(arr, [50, 95, 99]))
+    p50, p90, p95, p99 = (float(v) for v in np.percentile(arr, [50, 90, 95, 99]))
     throughput = float(sample.shape[0] * 1000.0 / max(arr.mean(), 1.0e-12))
     return LatencyStats(
         backend=backend,
         batch_size=int(sample.shape[0]),
         n_runs=n_runs,
         p50_ms=round(p50, 3),
+        p90_ms=round(p90, 3),
         p95_ms=round(p95, 3),
         p99_ms=round(p99, 3),
         mean_ms=round(float(arr.mean()), 3),
@@ -118,6 +120,20 @@ def benchmark_backends(
     for batch_size in batch_sizes:
         sample = torch.randn(batch_size, input_dim)
         stats = measure_latency(model_fn, sample, n_warmup=n_warmup, n_runs=n_runs, backend=backend)
+        if stats.p99_ms <= 15.0:
+            logger.info(
+                "SLA PASS: %s B=%d P99 %.3fms < 15.0ms target",
+                backend,
+                batch_size,
+                stats.p99_ms,
+            )
+        else:
+            logger.warning(
+                "SLA BREACH: %s B=%d P99 %.3fms >= 15.0ms target",
+                backend,
+                batch_size,
+                stats.p99_ms,
+            )
         logger.info("%s", stats)
         runs.append(stats)
     return runs
@@ -190,6 +206,7 @@ def main(argv: list[str] | None = None) -> None:
     model.eval()
 
     def compiled_fn(x: torch.Tensor) -> torch.Tensor:
+        """Execute forward pass or anomaly_score for eager PyTorch model."""
         if hasattr(model, "anomaly_score"):
             return model.anomaly_score(x)
         return model(x)
@@ -206,6 +223,33 @@ def main(argv: list[str] | None = None) -> None:
     stats.extend(pytorch_stats)
 
     artifacts_dir = Path(config.get("paths", {}).get("artifacts", "models/artifacts"))
+
+    exir_candidates = [
+        artifacts_dir / "autoencoder.pt2",
+        ckpt_dir / "autoencoder.pt2",
+    ]
+    exir_path = next((p for p in exir_candidates if p.is_file()), None)
+    if exir_path is not None:
+        try:
+            exir_module = load_exir(exir_path)
+
+            def exir_fn(x: torch.Tensor) -> torch.Tensor:
+                """Execute EXIR exported graph with input tensor."""
+                return exir_module(x)
+
+            exir_stats = benchmark_backends(
+                model_fn=exir_fn,
+                batch_sizes=batch_sizes,
+                input_dim=input_dim,
+                n_warmup=n_warmup,
+                n_runs=n_runs,
+                backend="exir",
+            )
+            stats.extend(exir_stats)
+            logger.info("Benchmarked EXIR runtime artifact from %s", exir_path)
+        except Exception as exc:
+            logger.warning("Could not benchmark EXIR runtime: %s", exc)
+
     onnx_candidates = [
         artifacts_dir / "autoencoder.onnx",
         ckpt_dir / "autoencoder.onnx",
@@ -227,6 +271,7 @@ def main(argv: list[str] | None = None) -> None:
                 input_name = session.get_inputs()[0].name
 
                 def onnx_fn(x: torch.Tensor) -> np.ndarray:
+                    """Execute ONNX runtime inference session with input tensor."""
                     return session.run(None, {input_name: x.numpy()})[0]
 
                 onnx_stats = benchmark_backends(

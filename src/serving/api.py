@@ -138,6 +138,12 @@ def build_scorer(config: Config) -> "Scorer":
         logger.warning("Checkpoint %s missing; using reference scoring model", model_path)
         loaded_serialized = False
     gate, normalizer = _load_gate(config)
+    calibrated_const = getattr(model, "calibrated_const", None)
+    if calibrated_const is not None:
+        anomaly_const = float(calibrated_const)
+        logger.info("Using calibrated anomaly_const %.2f from checkpoint", anomaly_const)
+    else:
+        anomaly_const = float(config.serving.anomaly_const)
 
     shap_background = None
 
@@ -173,7 +179,7 @@ def build_scorer(config: Config) -> "Scorer":
     return Scorer(
         model=model,
         input_dim=int(config.autoencoder.input_dim),
-        anomaly_const=float(config.serving.anomaly_const),
+        anomaly_const=anomaly_const,
         approve_threshold=float(config.scoring.approve_threshold),
         block_threshold=float(config.scoring.block_threshold),
         escalate_threshold=float(config.scoring.escalate_threshold),
@@ -371,7 +377,7 @@ class Scorer:
             from src.explainability.shap_explainer import explain_transaction  # type: ignore
 
             has_shap = True
-        except (ImportError, AttributeError):
+        except ImportError, AttributeError:
             pass
 
         if has_shap:
@@ -520,11 +526,13 @@ def create_app(config: Config | None = None) -> FastAPI:
         """Self-monitoring counters: volume, errors, latency percentiles."""
         latencies = list(app.state.latencies)
         avg = float(np.mean(latencies)) if latencies else 0.0
+        p90 = float(np.percentile(latencies, 90)) if latencies else 0.0
         p99 = float(np.percentile(latencies, 99)) if latencies else 0.0
         return MetricsResponse(
             requests_total=app.state.requests_total,
             errors_total=app.state.errors_total,
             avg_latency_ms=avg,
+            p90_latency_ms=p90,
             p99_latency_ms=p99,
         )
 

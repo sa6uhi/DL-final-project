@@ -151,6 +151,7 @@ class MetricsResponse(BaseModel):
     requests_total: int = Field(..., ge=0)
     errors_total: int = Field(..., ge=0)
     avg_latency_ms: float = Field(..., ge=0.0)
+    p90_latency_ms: float = Field(0.0, ge=0.0)
     p99_latency_ms: float = Field(..., ge=0.0)
 
 

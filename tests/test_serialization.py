@@ -102,6 +102,17 @@ def test_export_onnx_dynamic_batch(ref_model: ReferenceEncoder, tmp_path: Path) 
     assert out2.shape == (9, 1)
 
 
+def test_export_exir_dynamic_batch(ref_model: ReferenceEncoder, tmp_path: Path) -> None:
+    """EXIR graph supports arbitrary batch sizes at runtime."""
+    sample = torch.randn(4, 20)
+    path = export_exir(ref_model, tmp_path / "dyn.pt2", sample)
+    loaded = load_exir(path)
+    out1 = loaded(torch.ones(1, 20))
+    out9 = loaded(torch.ones(9, 20))
+    assert out1.shape == (1, 1)
+    assert out9.shape == (9, 1)
+
+
 def test_verify_parity_detects_mismatch(
     ref_model: ReferenceEncoder, sample_batch: torch.Tensor
 ) -> None:
