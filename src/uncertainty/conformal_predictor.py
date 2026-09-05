@@ -3,6 +3,7 @@
 # Import necessary libraries
 from __future__ import annotations
 
+import math
 import torch
 
 
@@ -83,13 +84,18 @@ def conformal_quantile(
     if not torch.isfinite(calibration_scores).all():
         raise ValueError("calibration_scores must contain only finite values")
 
+    if torch.any((calibration_scores < 0.0) | (calibration_scores > 1.0)):
+        raise ValueError("calibration_scores must be in [0, 1]")
+
     if not 0.0 < alpha < 1.0:
         raise ValueError("alpha must be in (0, 1)")
 
     n = calibration_scores.numel()
 
-    rank = int(torch.ceil(torch.tensor((n + 1) * (1.0 - alpha))).item())
-    rank = min(rank, n)
+    rank = math.ceil((n + 1) * (1.0 - alpha))
+
+    if rank > n:
+        return 1.0
 
     sorted_scores = torch.sort(calibration_scores).values
 
@@ -140,10 +146,10 @@ def triage_decision(prediction: frozenset[int]) -> str:
     if prediction == frozenset({1}):
         return "auto_block"
 
-    if prediction == frozenset({0, 1}):
+    if prediction in (frozenset(), frozenset({0, 1})):
         return "human_review"
 
-    raise ValueError("prediction set must be {0}, {1}, or {0, 1}")
+    raise ValueError("prediction set must contain only labels 0 and 1")
 
 
 class SplitConformalPredictor:

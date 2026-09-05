@@ -138,3 +138,22 @@ def test_split_conformal_predictor_requires_fit() -> None:
 def test_split_conformal_predictor_rejects_invalid_alpha() -> None:
     with pytest.raises(ValueError, match="alpha"):
         SplitConformalPredictor(alpha=1.0)
+
+
+def test_triage_decision_empty_set_routes_to_human_review() -> None:
+    assert triage_decision(frozenset()) == "human_review"
+
+
+def test_conformal_quantile_returns_one_when_rank_exceeds_sample_size() -> None:
+    scores = torch.tensor([0.1, 0.2, 0.3])
+
+    threshold = conformal_quantile(scores, alpha=0.01)
+
+    assert threshold == 1.0
+
+
+def test_conformal_quantile_rejects_scores_outside_unit_interval() -> None:
+    scores = torch.tensor([0.1, 1.2])
+
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        conformal_quantile(scores, alpha=0.1)
