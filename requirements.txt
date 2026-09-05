@@ -61,6 +61,7 @@ pytokens==0.4.1
 PyYAML==6.0.3
 scikit-learn==1.9.0
 scipy==1.18.1
+shap==0.52.0
 setuptools==78.1.0
 starlette==1.6.0
 sympy==1.14.0

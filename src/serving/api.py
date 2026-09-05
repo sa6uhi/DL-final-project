@@ -34,7 +34,7 @@ from src.serving.schemas import (
     StreamResponse,
 )
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
-from src.training.train_autoencoder import load_checkpoint
+from src.training.train_autoencoder import _load_legit_features, load_checkpoint
 from src.training.train_hybrid_gating import load_checkpoint as load_gate_checkpoint
 from src.utils.config import Config, load_config
 from src.utils.logger import get_logger
@@ -145,6 +145,37 @@ def build_scorer(config: Config) -> "Scorer":
     else:
         anomaly_const = float(config.serving.anomaly_const)
 
+    shap_background = None
+
+    try:
+        train_path = config.get_path("data.train_data_path")
+        non_feature_cols = list(config.data.non_feature_cols)
+
+        legit_features = _load_legit_features(
+            train_path,
+            non_feature_cols,
+        )
+
+        background_size = min(
+            int(config.explainability.shap_background_size),
+            len(legit_features),
+        )
+
+        shap_background = torch.as_tensor(
+            legit_features[:background_size],
+            dtype=torch.float32,
+        )
+
+        logger.info(
+            "Loaded %d legitimate transactions for SHAP background",
+            background_size,
+        )
+    except (FileNotFoundError, ValueError, AttributeError, KeyError) as exc:
+        logger.warning(
+            "Unable to load SHAP background; explanations will use fallback residuals: %s",
+            exc,
+        )
+
     return Scorer(
         model=model,
         input_dim=int(config.autoencoder.input_dim),
@@ -156,6 +187,7 @@ def build_scorer(config: Config) -> "Scorer":
         l1_gamma=float(config.autoencoder.anomaly_score.l1_gamma),
         gate=gate,
         normalizer=normalizer,
+        shap_background=shap_background,
     )
 
 
@@ -192,6 +224,7 @@ class Scorer:
         l1_gamma: float,
         gate: LearnedHybridGate | None = None,
         normalizer: PercentileNormalizer | None = None,
+        shap_background: torch.Tensor | None = None,
     ) -> None:
         """Initialize the scorer."""
         self.model = model
@@ -205,6 +238,8 @@ class Scorer:
         self.l1_gamma = l1_gamma
         self.gate = gate
         self.normalizer = normalizer
+        self.shap_background = shap_background
+
         if gate is not None:
             gate.eval()
 
@@ -342,12 +377,19 @@ class Scorer:
             from src.explainability.shap_explainer import explain_transaction  # type: ignore
 
             has_shap = True
-        except ImportError, AttributeError:
+        except (ImportError, AttributeError):
             pass
 
         if has_shap:
             try:
-                drivers = explain_transaction(features, top_k=top_k, ft_probability=ft_probability)
+                drivers = explain_transaction(
+                    features,
+                    model=self.model,
+                    background=self.shap_background,
+                    top_k=top_k,
+                    ft_probability=ft_probability,
+                    l1_gamma=self.l1_gamma,
+                )
                 return {"top_drivers": drivers, "method": "shap"}
             except Exception as exc:
                 logger.warning("SHAP explanation failed, falling back to DAE residuals: %s", exc)
@@ -390,7 +432,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.config = cfg
     app.state.scorer = build_scorer(cfg)
     app.state.start_time = time.perf_counter()
-    app.state.latencies: deque[float] = deque(maxlen=MAX_LATENCY_SAMPLES)
+    app.state.latencies = deque(maxlen=MAX_LATENCY_SAMPLES)
     app.state.requests_total = 0
     app.state.errors_total = 0
 
