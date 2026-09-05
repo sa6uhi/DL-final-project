@@ -57,6 +57,7 @@ def test_export_exir_parity(
     path = export_exir(ref_model, tmp_path / "ref.pt2", sample_batch)
     assert path.is_file()
     loaded = load_exir(path)
+    # Toy reference model (10-dim) easily holds 1e-4; prod 800-dim uses PARITY_TOLERANCE (2e-3).
     assert torch.allclose(ref_model(sample_batch), loaded(sample_batch), atol=1e-4)
     verify_parity(ref_model, loaded, sample_batch)
 
@@ -79,6 +80,7 @@ def test_export_onnx_parity(
     ort_input = {session.get_inputs()[0].name: sample_batch.numpy()}
     ort_output = session.run(None, ort_input)[0]
     y_ref = ref_model(sample_batch).detach().numpy()
+    # Toy model has tiny FMA drift (< 1e-4); prod 800-dim uses PARITY_TOLERANCE.
     assert np.abs(y_ref - ort_output).max() < 1e-4
     verify_parity(ref_model, torch.from_numpy(ort_output), sample_batch)
 
@@ -139,6 +141,7 @@ def test_export_all_falls_back_to_reference(tmp_path: Path) -> None:
     report = export_all(tmp_path / "nope", tmp_path / "out", config)
     assert (tmp_path / "out" / "autoencoder.pt2").exists()
     assert (tmp_path / "out" / "autoencoder.onnx").exists()
+    # 8-dim fallback stays < 1e-4; prod 800-dim uses PARITY_TOLERANCE
     assert report["exir_max_diff"] < 1e-4
     assert report["onnx_max_diff"] < 1e-4
 
