@@ -342,7 +342,7 @@ class Scorer:
             from src.explainability.shap_explainer import explain_transaction  # type: ignore
 
             has_shap = True
-        except ImportError, AttributeError:
+        except (ImportError, AttributeError):
             pass
 
         if has_shap:

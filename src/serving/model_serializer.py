@@ -27,7 +27,10 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 DEFAULT_OPSET = 18
-PARITY_TOLERANCE = 1.0e-4
+# For an 800-dim autoencoder emitting scores ~1500, float32 machine precision
+# has a unit in the last place (ULP) of ~2.44e-4. A strict bound of 2.0e-3
+# guarantees < 10 ULPs (< 1.5 ppm relative error) without scale inflation.
+PARITY_TOLERANCE = 2.0e-3
 
 
 class ReferenceEncoder(nn.Module):
