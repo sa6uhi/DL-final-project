@@ -153,10 +153,12 @@ def export_exir(
     out.parent.mkdir(parents=True, exist_ok=True)
     model = model.to(device)
     sample = sample.to(device)
+    batch_dim = torch.export.Dim("batch")
+    dynamic_shapes = ({0: batch_dim},)
     with torch.no_grad():
-        exported = torch.export.export(model, (sample,))
+        exported = torch.export.export(model, (sample,), dynamic_shapes=dynamic_shapes)
         torch.export.save(exported, out)
-    logger.info("Exported EXIR model to %s", out)
+    logger.info("Exported EXIR model to %s (dynamic batch)", out)
     return out
 
 
@@ -296,7 +298,14 @@ class ScoreModule(nn.Module):
         Returns:
             Score tensor of shape ``(batch, 1)``.
         """
-        scores = self.base.anomaly_score(x, l1_gamma=self.l1_gamma)
+        if hasattr(self.base, "decode") and hasattr(self.base, "encode"):
+            x_hat = self.base.decode(self.base.encode(x))
+            residual = x - x_hat
+            l2 = torch.sum(residual.pow(2), dim=-1)
+            l1 = torch.sum(torch.abs(residual), dim=-1)
+            scores = l2 + self.l1_gamma * l1
+        else:
+            scores = self.base.anomaly_score(x, l1_gamma=self.l1_gamma)
         return scores.unsqueeze(-1)
 
 
