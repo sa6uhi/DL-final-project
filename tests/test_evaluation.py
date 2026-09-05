@@ -27,8 +27,8 @@ def test_measure_latency_positive_percentiles(simple_fn: torch.nn.Module) -> Non
     """Latencies are positive and percentiles are monotonic."""
     stats = measure_latency(simple_fn, torch.randn(4, 8), n_warmup=2, n_runs=30)
     assert isinstance(stats, LatencyStats)
-    assert stats.p50_ms >= 0.0 and stats.p95_ms >= stats.p50_ms
-    assert stats.p99_ms >= stats.p95_ms
+    assert stats.p50_ms >= 0.0 and stats.p90_ms >= stats.p50_ms
+    assert stats.p95_ms >= stats.p90_ms and stats.p99_ms >= stats.p95_ms
     assert stats.throughput_req_s > 0.0
     assert stats.batch_size == 4 and stats.n_runs == 30
 
@@ -84,7 +84,7 @@ def test_write_latency_report(tmp_path: Path) -> None:
     assert (tmp_path / "latency_summary.json").exists()
     assert (
         csv_path.read_text().splitlines()[0]
-        == "backend,batch_size,n_runs,p50_ms,p95_ms,p99_ms,mean_ms,throughput_req_s"
+        == "backend,batch_size,n_runs,p50_ms,p90_ms,p95_ms,p99_ms,mean_ms,throughput_req_s"
     )
 
 
