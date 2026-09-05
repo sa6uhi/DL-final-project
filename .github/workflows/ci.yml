@@ -39,7 +39,7 @@ jobs:
         run: uv pip install -r requirements-format.txt
 
       - name: Formatting check (black)
-        run: black --check src tests
+        run: black --check --target-version py313 src tests
 
       - name: Lint check (flake8)
         run: flake8 src tests

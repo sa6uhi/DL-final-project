@@ -156,6 +156,7 @@ hybrid_gating:
     input_dim: 2
     hidden_dims: [16, 8]
     dropout: 0.1
+    normalize_percentile: 99.9
 
     training:
       lr: 1.0e-3
@@ -238,3 +239,7 @@ sequence:
 
 features:
   target_col: "isFraud"
+
+
+explainability:
+  shap_background_size: 50
