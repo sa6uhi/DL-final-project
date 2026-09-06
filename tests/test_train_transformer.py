@@ -65,6 +65,10 @@ def make_frame(n_rows: int = N_ROWS, seed: int = 0) -> pd.DataFrame:
     frame[SEQUENCE_COLUMN] = [rng.normal(size=(SEQ_LEN, SEQ_DIM)).tolist() for _ in range(n_rows)]
     # Deterministic, learnable signal with a minority positive class.
     frame["isFraud"] = (frame["c0"] > frame["c0"].quantile(0.75)).astype(np.int64)
+
+    # Monotonic temporal values support leakage-safe chronological splitting.
+    frame["TransactionDT"] = np.arange(n_rows, dtype=np.int64)
+
     return frame
 
 
