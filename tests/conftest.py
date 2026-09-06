@@ -9,11 +9,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import matplotlib
 import numpy as np
 import pytest
 
 from src.utils.config import Config, load_config
 from src.utils.seed import seed_everything
+
+matplotlib.use("Agg")
 
 if TYPE_CHECKING:
     import torch

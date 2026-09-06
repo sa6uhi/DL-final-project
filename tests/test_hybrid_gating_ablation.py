@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from experiments.hybrid_gating_ablation import (
@@ -111,6 +112,113 @@ def test_evaluate_learned_gate_from_checkpoint(tmp_path: Path) -> None:
 
     assert scores.shape == anomaly_scores.numpy().shape
     assert np.isfinite(scores).all()
+
+
+def test_evaluate_four_input_learned_gate_from_checkpoint(
+    tmp_path: Path,
+) -> None:
+    """History-aware learned gate evaluates with velocity context."""
+    anomaly_scores = torch.tensor(
+        [0.1, 0.2, 5.0, 6.0, 0.3, 7.0],
+        dtype=torch.float32,
+    )
+
+    probabilities_ft = np.array(
+        [0.05, 0.06, 0.90, 0.95, 0.07, 0.92],
+        dtype=np.float32,
+    )
+
+    velocity_features = np.array(
+        [
+            [0.0, 0.0],
+            [0.2, 1.0],
+            [0.4, 2.0],
+            [0.6, 3.0],
+            [0.8, 4.0],
+            [1.0, 5.0],
+        ],
+        dtype=np.float32,
+    )
+
+    labels = np.array(
+        [0, 0, 1, 1, 0, 1],
+        dtype=np.int64,
+    )
+
+    normalizer = PercentileNormalizer(percentile=99.0).fit(anomaly_scores)
+
+    model = LearnedHybridGate(
+        input_dim=4,
+        hidden_dims=[4],
+        dropout=0.0,
+    )
+
+    checkpoint_path = tmp_path / "hybrid_gating_4_input.pt"
+
+    save_checkpoint(
+        model=model,
+        normalizer=normalizer,
+        path=checkpoint_path,
+    )
+
+    metrics, scores = evaluate_learned_gate(
+        eval_scores=anomaly_scores.numpy(),
+        probabilities_ft=probabilities_ft,
+        velocity_features=velocity_features,
+        labels=labels,
+        checkpoint_path=checkpoint_path,
+        max_fpr=0.5,
+    )
+
+    assert set(metrics) == {
+        "rocauc",
+        "auprc",
+        "tpr_at_fpr",
+    }
+
+    assert scores.shape == anomaly_scores.numpy().shape
+    assert np.isfinite(scores).all()
+
+
+def test_four_input_learned_gate_requires_velocity_features(
+    tmp_path: Path,
+) -> None:
+    """Four-input checkpoints reject missing historical context."""
+    anomaly_scores = torch.tensor(
+        [0.1, 0.2, 5.0, 6.0],
+        dtype=torch.float32,
+    )
+
+    normalizer = PercentileNormalizer(percentile=99.0).fit(anomaly_scores)
+
+    model = LearnedHybridGate(
+        input_dim=4,
+        hidden_dims=[4],
+        dropout=0.0,
+    )
+
+    checkpoint_path = tmp_path / "hybrid_gating_4_input.pt"
+
+    save_checkpoint(
+        model=model,
+        normalizer=normalizer,
+        path=checkpoint_path,
+    )
+
+    with pytest.raises(ValueError, match="velocity_features"):
+        evaluate_learned_gate(
+            eval_scores=anomaly_scores.numpy(),
+            probabilities_ft=np.array(
+                [0.1, 0.2, 0.8, 0.9],
+                dtype=np.float32,
+            ),
+            labels=np.array(
+                [0, 0, 1, 1],
+                dtype=np.int64,
+            ),
+            checkpoint_path=checkpoint_path,
+            max_fpr=0.5,
+        )
 
 
 def test_plot_gate_comparison_saves_figure(tmp_path: Path) -> None:
