@@ -360,6 +360,71 @@ def load_checkpoint(
     return model, normalizer
 
 
+def load_training_history(
+    path: str | Path,
+    device: str = "cpu",
+) -> GateTrainingHistory | None:
+    """Restore optional learned-gate training history from a checkpoint.
+
+    Args:
+        path: Checkpoint file created by :func:`save_checkpoint`.
+        device: Device used when loading the checkpoint payload.
+
+    Returns:
+        Restored training history when present, otherwise ``None``.
+
+    Raises:
+        FileNotFoundError: If the checkpoint file does not exist.
+        ValueError: If stored training-history metadata is malformed.
+    """
+    checkpoint_path = Path(path)
+
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    payload: dict[str, Any] = torch.load(
+        checkpoint_path,
+        map_location=device,
+        weights_only=False,
+    )
+
+    history_state = payload.get("training_history")
+
+    if history_state is None:
+        return None
+
+    if not isinstance(history_state, dict):
+        raise ValueError("Checkpoint training history must be a dictionary")
+
+    required_keys = {
+        "train_losses",
+        "val_losses",
+        "best_epoch",
+        "best_val_loss",
+    }
+
+    missing_keys = required_keys.difference(history_state)
+
+    if missing_keys:
+        missing = ", ".join(sorted(missing_keys))
+        raise ValueError(f"Checkpoint training history is missing required fields: {missing}")
+
+    try:
+        train_losses = [float(value) for value in history_state["train_losses"]]
+        val_losses = [float(value) for value in history_state["val_losses"]]
+        best_epoch = int(history_state["best_epoch"])
+        best_val_loss = float(history_state["best_val_loss"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Checkpoint training history contains invalid values") from exc
+
+    return GateTrainingHistory(
+        train_losses=train_losses,
+        val_losses=val_losses,
+        best_epoch=best_epoch,
+        best_val_loss=best_val_loss,
+    )
+
+
 def train_gate(
     train_data: GateData,
     val_data: GateData,
