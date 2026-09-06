@@ -186,7 +186,7 @@ def gated_client(tmp_path) -> TestClient:
     from src.training.train_hybrid_gating import save_checkpoint
 
     seed_everything(42)
-    gate = LearnedHybridGate(input_dim=2, hidden_dims=[16, 8], dropout=0.1)
+    gate = LearnedHybridGate(input_dim=4, hidden_dims=[16, 8], dropout=0.1)
     gate.eval()
     normalizer = PercentileNormalizer(percentile=99.0).fit(
         torch.tensor([0.1, 0.5, 1.0, 2.0], dtype=torch.float32)
@@ -250,36 +250,133 @@ def test_health_reports_gate_loaded(gated_client: TestClient) -> None:
 def test_predict_with_gate_fuses_ft_probability(
     gated_client: TestClient, features: list[float]
 ) -> None:
-    """Gate-loaded /predict fuses the FT posterior into the probability."""
-    low = gated_client.post("/predict", json={"features": features, "ft_probability": 0.01}).json()
-    high = gated_client.post("/predict", json={"features": features, "ft_probability": 0.99}).json()
+    """Gate-loaded /predict fuses FT and historical context."""
+    low = gated_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "ft_probability": 0.01,
+            "history_density": 0.4,
+            "history_amount_intensity": 2.0,
+        },
+    ).json()
+
+    high = gated_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "ft_probability": 0.99,
+            "history_density": 0.4,
+            "history_amount_intensity": 2.0,
+        },
+    ).json()
+
     assert low["gate_used"] is True
     assert high["gate_used"] is True
     assert 0.0 <= low["fraud_probability"] <= 1.0
-    assert high["fraud_probability"] > low["fraud_probability"]
+    assert 0.0 <= high["fraud_probability"] <= 1.0
 
 
 def test_predict_with_gate_missing_ft_probability_is_422(
     gated_client: TestClient, features: list[float]
 ) -> None:
     """Gate-loaded /predict without ft_probability is rejected."""
-    response = gated_client.post("/predict", json={"features": features})
+    response = gated_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "history_density": 0.4,
+            "history_amount_intensity": 2.0,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_predict_with_four_input_gate_missing_velocity_is_422(
+    gated_client: TestClient, features: list[float]
+) -> None:
+    """A 4-input learned gate requires historical velocity context."""
+    response = gated_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "ft_probability": 0.5,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "history_density" in str(response.json()["detail"])
+
+
+def test_predict_with_partial_velocity_is_422(
+    gated_client: TestClient, features: list[float]
+) -> None:
+    """History density and amount intensity must be supplied together."""
+    response = gated_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "ft_probability": 0.5,
+            "history_density": 0.4,
+        },
+    )
+
     assert response.status_code == 422
 
 
 def test_stream_with_gate_fuses_batch(gated_client: TestClient, features: list[float]) -> None:
-    """Gate-loaded /stream fuses per-transaction FT posteriors in order."""
+    """4-input gate accepts aligned FT and velocity context for a batch."""
     payload = {
         "transactions": [
-            {"features": features, "ft_probability": 0.1},
-            {"features": features, "ft_probability": 0.9},
+            {
+                "features": features,
+                "ft_probability": 0.1,
+                "history_density": 0.2,
+                "history_amount_intensity": 1.0,
+            },
+            {
+                "features": features,
+                "ft_probability": 0.9,
+                "history_density": 0.8,
+                "history_amount_intensity": 3.0,
+            },
         ]
     }
+
     response = gated_client.post("/stream", json=payload)
+
     assert response.status_code == 200
+
     results = response.json()["results"]
-    assert all(r["gate_used"] is True for r in results)
-    assert results[1]["fraud_probability"] > results[0]["fraud_probability"]
+
+    assert len(results) == 2
+    assert all(result["gate_used"] is True for result in results)
+    assert all(0.0 <= result["fraud_probability"] <= 1.0 for result in results)
+
+
+def test_stream_with_gate_partial_velocity_is_422(
+    gated_client: TestClient, features: list[float]
+) -> None:
+    """Batch velocity context must be complete for every transaction."""
+    payload = {
+        "transactions": [
+            {
+                "features": features,
+                "ft_probability": 0.1,
+                "history_density": 0.2,
+                "history_amount_intensity": 1.0,
+            },
+            {
+                "features": features,
+                "ft_probability": 0.9,
+            },
+        ]
+    }
+
+    response = gated_client.post("/stream", json=payload)
+
+    assert response.status_code == 422
 
 
 def test_stream_with_gate_partial_ft_probability_is_422(

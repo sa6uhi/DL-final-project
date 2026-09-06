@@ -47,6 +47,10 @@ class PredictionRequest(BaseModel):
         ft_probability: Optional supervised FT-Transformer fraud posterior in
             ``[0, 1]``. When the learned hybrid gate is loaded, this is fused
             with the DAE residual; otherwise it is ignored.
+        history_density: Fraction of available historical transaction slots that
+            contain prior activity, in ``[0, 1]``.
+        history_amount_intensity: ``log1p`` mean absolute historical transaction
+            amount across available prior rows.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -55,6 +59,8 @@ class PredictionRequest(BaseModel):
     transaction_id: Optional[str] = Field(default=None, max_length=64)
     card_id: Optional[str] = Field(default=None, max_length=64)
     ft_probability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    history_density: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    history_amount_intensity: Optional[float] = Field(default=None, ge=0.0)
 
     @field_validator("features")
     @classmethod

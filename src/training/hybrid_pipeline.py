@@ -14,6 +14,7 @@ from src.data.temporal_split import (
     split_validation_for_gate_and_conformal,
 )
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
+from src.training.gate_velocity import extract_velocity_features
 from src.training.train_hybrid_gating import (
     GateData,
     build_gate_features,
@@ -204,15 +205,59 @@ def autoencoder_anomaly_scores(
     return scores
 
 
+def velocity_features_from_frame(
+    df: pd.DataFrame,
+    *,
+    sequence_col: str = "sequence_array",
+    transaction_amount_index: int = 0,
+) -> torch.Tensor:
+    """Extract causal learned-gate velocity features from a processed split.
+
+    The processed data pipeline stores each transaction's prior-only history
+    in ``sequence_array``. This helper converts those histories into the
+    velocity context consumed by the learned hybrid gate.
+
+    Args:
+        df: Processed transaction split containing historical sequences.
+        sequence_col: Column containing per-row historical sequence arrays.
+        transaction_amount_index: Position of TransactionAmt inside each
+            sequence timestep.
+
+    Returns:
+        Float tensor of shape ``(n_samples, 2)``.
+
+    Raises:
+        ValueError: If the frame is empty.
+        KeyError: If the historical sequence column is missing.
+    """
+    if df.empty:
+        raise ValueError("Cannot extract velocity features from an empty frame")
+
+    if sequence_col not in df.columns:
+        raise KeyError(f"DataFrame is missing required sequence column {sequence_col!r}")
+
+    features = extract_velocity_features(
+        df[sequence_col].tolist(),
+        transaction_amount_index=transaction_amount_index,
+    )
+
+    if features.shape[0] != len(df):
+        raise ValueError("Velocity feature count does not match DataFrame row count")
+
+    return features
+
+
 def make_gate_data(
     anomaly_scores: torch.Tensor,
     ft_probabilities: torch.Tensor,
+    velocity_features: torch.Tensor,
     labels: torch.Tensor,
 ) -> GateData:
     """Construct one learned-gate dataset from aligned upstream signals."""
     return GateData(
         anomaly_scores=anomaly_scores.detach().cpu().float(),
         ft_probabilities=ft_probabilities.detach().cpu().float(),
+        velocity_features=velocity_features.detach().cpu().float(),
         labels=labels.detach().cpu().long(),
     )
 
@@ -222,6 +267,7 @@ def learned_gate_probabilities(
     normalizer: PercentileNormalizer,
     anomaly_scores: torch.Tensor,
     ft_probabilities: torch.Tensor,
+    velocity_features: torch.Tensor,
 ) -> torch.Tensor:
     """Generate fused fraud probabilities using a trained learned gate.
 
@@ -234,6 +280,7 @@ def learned_gate_probabilities(
         normalizer: Normalizer fitted on gate-training anomaly scores.
         anomaly_scores: Raw DAE anomaly scores.
         ft_probabilities: FT-CAT fraud probabilities.
+        velocity_features: Causal transaction-velocity features.
 
     Returns:
         Learned fused fraud probabilities on CPU.
@@ -241,6 +288,7 @@ def learned_gate_probabilities(
     features = build_gate_features(
         anomaly_scores=anomaly_scores.detach().cpu().float(),
         transformer_probabilities=ft_probabilities.detach().cpu().float(),
+        velocity_features=velocity_features.detach().cpu().float(),
         normalizer=normalizer,
         fit_normalizer=False,
     )
@@ -282,6 +330,7 @@ def train_hybrid_calibration_pipeline(
     gate_val_data: GateData,
     conformal_anomaly_scores: torch.Tensor,
     conformal_ft_probabilities: torch.Tensor,
+    conformal_velocity_features: torch.Tensor,
     conformal_labels: torch.Tensor,
     config: Config,
     device: str | None = None,
@@ -299,6 +348,8 @@ def train_hybrid_calibration_pipeline(
         conformal_anomaly_scores: DAE scores for untouched calibration data.
         conformal_ft_probabilities: FT-CAT probabilities for untouched
             calibration data.
+        conformal_velocity_features: Causal transaction-velocity features for
+            untouched conformal calibration observations.
         conformal_labels: Binary labels for untouched calibration data.
         config: Central project configuration.
         device: Optional learned-gate training device.
@@ -318,6 +369,7 @@ def train_hybrid_calibration_pipeline(
         normalizer=normalizer,
         anomaly_scores=conformal_anomaly_scores,
         ft_probabilities=conformal_ft_probabilities,
+        velocity_features=conformal_velocity_features,
     )
 
     labels = conformal_labels.detach().cpu().long()
