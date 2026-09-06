@@ -205,3 +205,89 @@ def split_validation_for_gate_and_conformal(
     )
 
     return gate_df, conformal_df
+
+
+def split_gate_development(
+    gate_df: pd.DataFrame,
+    time_col: str = "TransactionDT",
+    train_fraction: float = 0.8,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Split gate-development data into chronological train and validation sets.
+
+    The learned hybrid gate requires a training subset and a separate
+    early-stopping validation subset. Both must remain earlier than the
+    conformal-calibration period.
+
+    The returned ordering is:
+
+        gate training -> gate validation
+
+    All observations sharing the split-boundary timestamp are assigned to the
+    gate-validation subset so the same timestamp cannot appear on both sides
+    of the temporal boundary.
+
+    Args:
+        gate_df: Gate-development portion of the original validation period.
+        time_col: Column representing chronological transaction time.
+        train_fraction: Approximate fraction assigned to learned-gate training.
+            Must be strictly between 0 and 1.
+
+    Returns:
+        Tuple containing ``gate_train_df`` and ``gate_val_df``.
+
+    Raises:
+        ValueError: If inputs are invalid, either resulting subset is empty,
+            or strict temporal separation cannot be established.
+    """
+    if gate_df.empty:
+        raise ValueError("Gate-development DataFrame must not be empty")
+
+    if time_col not in gate_df.columns:
+        raise ValueError(f"Missing temporal column: {time_col}")
+
+    if not 0.0 < train_fraction < 1.0:
+        raise ValueError("train_fraction must be strictly between 0 and 1")
+
+    if len(gate_df) < 2:
+        raise ValueError("Gate-development DataFrame must contain at least two observations")
+
+    sorted_gate = gate_df.sort_values(by=time_col).reset_index(drop=True)
+
+    target_index = int(len(sorted_gate) * train_fraction)
+    target_index = max(1, min(target_index, len(sorted_gate) - 1))
+
+    boundary_time = sorted_gate.iloc[target_index][time_col]
+
+    gate_train_df = sorted_gate[sorted_gate[time_col] < boundary_time].reset_index(drop=True)
+
+    gate_val_df = sorted_gate[sorted_gate[time_col] >= boundary_time].reset_index(drop=True)
+
+    if gate_train_df.empty:
+        raise ValueError(
+            "Unable to create a non-empty gate-training subset with strict " "temporal separation"
+        )
+
+    if gate_val_df.empty:
+        raise ValueError("Unable to create a non-empty gate-validation subset")
+
+    max_train_time = gate_train_df[time_col].max()
+    min_val_time = gate_val_df[time_col].min()
+
+    if max_train_time >= min_val_time:
+        raise ValueError(
+            "TEMPORAL LEAKAGE: Gate-training data overlaps with " "gate-validation data"
+        )
+
+    logger.info(
+        "Gate-development split complete - Train: %d, Validation: %d",
+        len(gate_train_df),
+        len(gate_val_df),
+    )
+
+    logger.info(
+        "Gate-development boundaries - Train_End: %s, Validation_Start: %s",
+        max_train_time,
+        min_val_time,
+    )
+
+    return gate_train_df, gate_val_df

@@ -7,6 +7,7 @@ import pytest
 
 from src.data.preprocessor import FraudPreprocessor
 from src.data.temporal_split import (
+    split_gate_development,
     split_temporal,
     split_validation_for_gate_and_conformal,
 )
@@ -268,6 +269,189 @@ def test_validation_split_rejects_identical_timestamps() -> None:
         match="Unable to create a non-empty gate subset",
     ):
         split_validation_for_gate_and_conformal(val_df)
+
+
+def test_gate_development_split_is_chronological() -> None:
+    """Assert gate training occurs strictly before gate validation."""
+    gate_df = pd.DataFrame(
+        {
+            "TransactionDT": np.arange(20) * 100,
+            "isFraud": np.zeros(20),
+        }
+    )
+
+    gate_train_df, gate_val_df = split_gate_development(
+        gate_df,
+        time_col="TransactionDT",
+        train_fraction=0.8,
+    )
+
+    assert len(gate_train_df) == 16
+    assert len(gate_val_df) == 4
+
+    assert gate_train_df["TransactionDT"].is_monotonic_increasing
+    assert gate_val_df["TransactionDT"].is_monotonic_increasing
+
+    assert gate_train_df["TransactionDT"].max() < gate_val_df["TransactionDT"].min()
+
+    train_times = set(gate_train_df["TransactionDT"])
+    val_times = set(gate_val_df["TransactionDT"])
+
+    assert train_times.isdisjoint(val_times)
+
+
+def test_gate_development_split_sorts_unsorted_input() -> None:
+    """Assert gate-development observations are sorted before splitting."""
+    gate_df = pd.DataFrame(
+        {
+            "TransactionDT": [
+                800,
+                100,
+                500,
+                200,
+                700,
+                300,
+                600,
+                400,
+                900,
+                1000,
+            ],
+            "isFraud": np.zeros(10),
+        }
+    )
+
+    gate_train_df, gate_val_df = split_gate_development(
+        gate_df,
+        time_col="TransactionDT",
+    )
+
+    assert gate_train_df["TransactionDT"].is_monotonic_increasing
+    assert gate_val_df["TransactionDT"].is_monotonic_increasing
+
+    assert gate_train_df["TransactionDT"].max() < gate_val_df["TransactionDT"].min()
+
+
+def test_gate_development_keeps_duplicate_boundary_timestamp_together() -> None:
+    """Assert duplicate gate boundary timestamps stay in validation."""
+    gate_df = pd.DataFrame(
+        {
+            "TransactionDT": [
+                100,
+                200,
+                300,
+                400,
+                500,
+                600,
+                700,
+                800,
+                800,
+                800,
+            ],
+            "isFraud": np.zeros(10),
+        }
+    )
+
+    gate_train_df, gate_val_df = split_gate_development(
+        gate_df,
+        time_col="TransactionDT",
+        train_fraction=0.8,
+    )
+
+    assert 800 not in set(gate_train_df["TransactionDT"])
+    assert 800 in set(gate_val_df["TransactionDT"])
+
+    assert gate_train_df["TransactionDT"].max() < gate_val_df["TransactionDT"].min()
+
+
+@pytest.mark.parametrize(
+    "train_fraction",
+    [
+        0.0,
+        1.0,
+        -0.1,
+        1.1,
+    ],
+)
+def test_gate_development_rejects_invalid_train_fraction(
+    train_fraction: float,
+) -> None:
+    """Assert gate train fraction lies strictly between zero and one."""
+    gate_df = pd.DataFrame(
+        {
+            "TransactionDT": np.arange(10),
+            "isFraud": np.zeros(10),
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="train_fraction must be strictly between 0 and 1",
+    ):
+        split_gate_development(
+            gate_df,
+            train_fraction=train_fraction,
+        )
+
+
+def test_gate_development_rejects_empty_input() -> None:
+    """Assert an empty gate-development dataset is rejected."""
+    gate_df = pd.DataFrame(columns=["TransactionDT", "isFraud"])
+
+    with pytest.raises(
+        ValueError,
+        match="Gate-development DataFrame must not be empty",
+    ):
+        split_gate_development(gate_df)
+
+
+def test_gate_development_rejects_missing_time_column() -> None:
+    """Assert gate development requires the temporal column."""
+    gate_df = pd.DataFrame(
+        {
+            "isFraud": [0, 1, 0, 1],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Missing temporal column",
+    ):
+        split_gate_development(
+            gate_df,
+            time_col="TransactionDT",
+        )
+
+
+def test_gate_development_rejects_single_observation() -> None:
+    """Assert gate development requires at least two observations."""
+    gate_df = pd.DataFrame(
+        {
+            "TransactionDT": [100],
+            "isFraud": [0],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="at least two observations",
+    ):
+        split_gate_development(gate_df)
+
+
+def test_gate_development_rejects_identical_timestamps() -> None:
+    """Assert identical timestamps cannot produce strict gate separation."""
+    gate_df = pd.DataFrame(
+        {
+            "TransactionDT": [100, 100, 100, 100],
+            "isFraud": [0, 1, 0, 1],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Unable to create a non-empty gate-training subset",
+    ):
+        split_gate_development(gate_df)
 
 
 def test_preprocessor_creates_nan_indicators() -> None:
