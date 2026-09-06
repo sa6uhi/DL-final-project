@@ -1,0 +1,240 @@
+{
+  "experiment": "dae_shap_consistency",
+  "component": "DAE anomaly score",
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "top_k": 15,
+  "n_features": 800,
+  "seed_results": [
+    {
+      "seed": 42,
+      "n_background": 32,
+      "n_global_samples": 64,
+      "top_features": [
+        {
+          "feature_name": "addr1",
+          "mean_abs_shap": 7.077895112134032
+        },
+        {
+          "feature_name": "TransactionAmt",
+          "mean_abs_shap": 3.1578423130644637
+        },
+        {
+          "feature_name": "C14",
+          "mean_abs_shap": 1.4991019160628023
+        },
+        {
+          "feature_name": "V128",
+          "mean_abs_shap": 1.469190488631356
+        },
+        {
+          "feature_name": "V317",
+          "mean_abs_shap": 1.3852196132177543
+        },
+        {
+          "feature_name": "C1",
+          "mean_abs_shap": 1.2544668152085143
+        },
+        {
+          "feature_name": "V314",
+          "mean_abs_shap": 1.190908324621249
+        },
+        {
+          "feature_name": "D8",
+          "mean_abs_shap": 1.1761143383156776
+        },
+        {
+          "feature_name": "addr1_is_nan",
+          "mean_abs_shap": 1.1369416950026061
+        },
+        {
+          "feature_name": "V313",
+          "mean_abs_shap": 1.1355003430879897
+        },
+        {
+          "feature_name": "D14",
+          "mean_abs_shap": 1.1273571139164917
+        },
+        {
+          "feature_name": "V133",
+          "mean_abs_shap": 1.0876202686183578
+        },
+        {
+          "feature_name": "addr2_is_nan",
+          "mean_abs_shap": 1.0677500313590282
+        },
+        {
+          "feature_name": "dist2",
+          "mean_abs_shap": 1.0669623528844527
+        },
+        {
+          "feature_name": "D11",
+          "mean_abs_shap": 1.0472806570895234
+        }
+      ]
+    },
+    {
+      "seed": 123,
+      "n_background": 32,
+      "n_global_samples": 64,
+      "top_features": [
+        {
+          "feature_name": "addr1",
+          "mean_abs_shap": 6.503555964701184
+        },
+        {
+          "feature_name": "TransactionAmt",
+          "mean_abs_shap": 2.224266437942008
+        },
+        {
+          "feature_name": "V128",
+          "mean_abs_shap": 2.2177950834969185
+        },
+        {
+          "feature_name": "V317",
+          "mean_abs_shap": 1.9140172067535486
+        },
+        {
+          "feature_name": "V314",
+          "mean_abs_shap": 1.4320160523244396
+        },
+        {
+          "feature_name": "V306",
+          "mean_abs_shap": 1.3841600559219358
+        },
+        {
+          "feature_name": "C11",
+          "mean_abs_shap": 1.2360016485500454
+        },
+        {
+          "feature_name": "C14",
+          "mean_abs_shap": 1.2312819783334685
+        },
+        {
+          "feature_name": "V126",
+          "mean_abs_shap": 1.1716118000390316
+        },
+        {
+          "feature_name": "V133",
+          "mean_abs_shap": 1.1646078053018285
+        },
+        {
+          "feature_name": "D8",
+          "mean_abs_shap": 1.1413977292752395
+        },
+        {
+          "feature_name": "V313",
+          "mean_abs_shap": 1.0667160179994344
+        },
+        {
+          "feature_name": "D11",
+          "mean_abs_shap": 1.059772114041826
+        },
+        {
+          "feature_name": "V132",
+          "mean_abs_shap": 1.0492473709356707
+        },
+        {
+          "feature_name": "V102",
+          "mean_abs_shap": 1.0410725380834343
+        }
+      ]
+    },
+    {
+      "seed": 2026,
+      "n_background": 32,
+      "n_global_samples": 64,
+      "top_features": [
+        {
+          "feature_name": "addr1",
+          "mean_abs_shap": 8.848768666176941
+        },
+        {
+          "feature_name": "TransactionAmt",
+          "mean_abs_shap": 3.395390320843822
+        },
+        {
+          "feature_name": "V128",
+          "mean_abs_shap": 1.550105831197654
+        },
+        {
+          "feature_name": "addr1_is_nan",
+          "mean_abs_shap": 1.3564919328549878
+        },
+        {
+          "feature_name": "addr2_is_nan",
+          "mean_abs_shap": 1.291022954133805
+        },
+        {
+          "feature_name": "D11",
+          "mean_abs_shap": 1.2419822308221884
+        },
+        {
+          "feature_name": "V294",
+          "mean_abs_shap": 1.1997857117019628
+        },
+        {
+          "feature_name": "D8",
+          "mean_abs_shap": 1.1966292317941434
+        },
+        {
+          "feature_name": "C5",
+          "mean_abs_shap": 1.1704735379433102
+        },
+        {
+          "feature_name": "C14",
+          "mean_abs_shap": 1.1011080110786906
+        },
+        {
+          "feature_name": "C6",
+          "mean_abs_shap": 1.0857244742691372
+        },
+        {
+          "feature_name": "V317",
+          "mean_abs_shap": 1.071674330126337
+        },
+        {
+          "feature_name": "V314",
+          "mean_abs_shap": 1.0698659405540911
+        },
+        {
+          "feature_name": "V131",
+          "mean_abs_shap": 0.9878709163374881
+        },
+        {
+          "feature_name": "V306",
+          "mean_abs_shap": 0.9584697816908977
+        }
+      ]
+    }
+  ],
+  "pairwise_comparisons": [
+    {
+      "seed_a": 42,
+      "seed_b": 123,
+      "top_k_jaccard": 0.5,
+      "spearman_correlation": 0.8890952644217168
+    },
+    {
+      "seed_a": 42,
+      "seed_b": 2026,
+      "top_k_jaccard": 0.5,
+      "spearman_correlation": 0.8996448606190585
+    },
+    {
+      "seed_a": 123,
+      "seed_b": 2026,
+      "top_k_jaccard": 0.42857142857142855,
+      "spearman_correlation": 0.8884619269549198
+    }
+  ],
+  "summary": {
+    "mean_top_k_jaccard": 0.4761904761904762,
+    "min_top_k_jaccard": 0.42857142857142855,
+    "mean_spearman_correlation": 0.8924006839985651,
+    "min_spearman_correlation": 0.8884619269549198
+  }
+}
