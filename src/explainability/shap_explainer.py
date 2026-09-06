@@ -10,6 +10,7 @@ import torch
 from torch import nn
 
 
+# Define a differentiable wrapper for the DAE anomaly score
 class DAEAnomalyScoreWrapper(nn.Module):
     """Differentiable wrapper exposing a DAE anomaly score for SHAP."""
 

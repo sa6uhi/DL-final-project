@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 DEFAULT_CONFIG = Path("config/config.yaml")
 DEFAULT_CHECKPOINT = Path("models/checkpoints/autoencoder.pt")
 
-
+# Define a function to create a DataLoader from a feature tensor
 def _make_loader(
     x: torch.Tensor, batch_size: int, shuffle: bool, num_workers: int, pin_memory: bool
 ) -> DataLoader[tuple[torch.Tensor, ...]]:
