@@ -291,3 +291,89 @@ def split_gate_development(
     )
 
     return gate_train_df, gate_val_df
+
+
+def split_model_development(
+    train_df: pd.DataFrame,
+    time_col: str = "TransactionDT",
+    train_fraction: float = 0.9,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Split base training data for upstream model fitting and early stopping.
+
+    The original 70% chronological training block is subdivided into:
+
+        earlier data -> upstream model training
+        later data   -> upstream early-stopping validation
+
+    This keeps the original validation period independent of FT-CAT and DAE
+    model fitting so it can later be reserved for learned-gate development
+    and conformal calibration.
+
+    All observations sharing the boundary timestamp are assigned to the
+    model-validation subset to preserve strict chronological separation.
+
+    Args:
+        train_df: Original chronological training DataFrame.
+        time_col: Column representing chronological transaction time.
+        train_fraction: Approximate fraction assigned to upstream training.
+            Must be strictly between 0 and 1.
+
+    Returns:
+        Tuple containing ``model_train_df`` and ``model_val_df``.
+
+    Raises:
+        ValueError: If inputs are invalid, either subset would be empty,
+            or strict temporal separation cannot be established.
+    """
+    if train_df.empty:
+        raise ValueError("Training DataFrame must not be empty")
+
+    if time_col not in train_df.columns:
+        raise ValueError(f"Missing temporal column: {time_col}")
+
+    if not 0.0 < train_fraction < 1.0:
+        raise ValueError("train_fraction must be strictly between 0 and 1")
+
+    if len(train_df) < 2:
+        raise ValueError("Training DataFrame must contain at least two observations")
+
+    sorted_train = train_df.sort_values(by=time_col).reset_index(drop=True)
+
+    target_index = int(len(sorted_train) * train_fraction)
+    target_index = max(1, min(target_index, len(sorted_train) - 1))
+
+    boundary_time = sorted_train.iloc[target_index][time_col]
+
+    model_train_df = sorted_train[sorted_train[time_col] < boundary_time].reset_index(drop=True)
+
+    model_val_df = sorted_train[sorted_train[time_col] >= boundary_time].reset_index(drop=True)
+
+    if model_train_df.empty:
+        raise ValueError(
+            "Unable to create a non-empty model-training subset with strict " "temporal separation"
+        )
+
+    if model_val_df.empty:
+        raise ValueError("Unable to create a non-empty model-validation subset")
+
+    max_train_time = model_train_df[time_col].max()
+    min_val_time = model_val_df[time_col].min()
+
+    if max_train_time >= min_val_time:
+        raise ValueError(
+            "TEMPORAL LEAKAGE: Model-training data overlaps with " "model-validation data"
+        )
+
+    logger.info(
+        "Model-development split complete - Train: %d, Validation: %d",
+        len(model_train_df),
+        len(model_val_df),
+    )
+
+    logger.info(
+        "Model-development boundaries - Train_End: %s, Validation_Start: %s",
+        max_train_time,
+        min_val_time,
+    )
+
+    return model_train_df, model_val_df

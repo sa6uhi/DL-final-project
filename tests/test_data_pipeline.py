@@ -482,3 +482,90 @@ def test_preprocessor_creates_nan_indicators() -> None:
     assert "feature_1_is_nan" in result_df.columns
     assert result_df.loc[0, "feature_1_is_nan"] == 1
     assert result_df.loc[1, "feature_1_is_nan"] == 0
+
+
+def test_split_model_development_is_chronological() -> None:
+    """Model train and validation subsets must be strictly chronological."""
+    from src.data.temporal_split import split_model_development
+
+    df = pd.DataFrame(
+        {
+            "TransactionDT": list(range(10)),
+            "isFraud": [0, 1] * 5,
+        }
+    )
+
+    model_train, model_val = split_model_development(
+        df,
+        train_fraction=0.8,
+    )
+
+    assert len(model_train) == 8
+    assert len(model_val) == 2
+    assert model_train["TransactionDT"].max() < model_val["TransactionDT"].min()
+
+
+def test_split_model_development_keeps_boundary_duplicates_together() -> None:
+    """Rows sharing the split timestamp must remain on the validation side."""
+    from src.data.temporal_split import split_model_development
+
+    df = pd.DataFrame(
+        {
+            "TransactionDT": [1, 2, 3, 4, 4, 4, 5, 6],
+            "isFraud": [0, 0, 1, 0, 1, 0, 1, 0],
+        }
+    )
+
+    model_train, model_val = split_model_development(
+        df,
+        train_fraction=0.5,
+    )
+
+    assert model_train["TransactionDT"].max() == 3
+    assert model_val["TransactionDT"].min() == 4
+    assert (model_val["TransactionDT"] == 4).sum() == 3
+    assert not (model_train["TransactionDT"] == 4).any()
+
+
+@pytest.mark.parametrize(
+    "fraction",
+    [0.0, 1.0, -0.1, 1.1],
+)
+def test_split_model_development_rejects_invalid_fraction(
+    fraction: float,
+) -> None:
+    """Invalid model-development fractions must fail clearly."""
+    from src.data.temporal_split import split_model_development
+
+    df = pd.DataFrame(
+        {
+            "TransactionDT": [1, 2, 3],
+            "isFraud": [0, 1, 0],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="train_fraction must be strictly between 0 and 1",
+    ):
+        split_model_development(
+            df,
+            train_fraction=fraction,
+        )
+
+
+def test_split_model_development_rejects_missing_time_column() -> None:
+    """Model-development splitting requires the configured time column."""
+    from src.data.temporal_split import split_model_development
+
+    df = pd.DataFrame(
+        {
+            "isFraud": [0, 1],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Missing temporal column",
+    ):
+        split_model_development(df)

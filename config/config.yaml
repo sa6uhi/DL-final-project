@@ -228,7 +228,12 @@ data:
     - "sequence_array"
 
 split:
-  time_col: "TransactionDT"
+    time_col: "TransactionDT"
+
+  # Subdivide the original 70% training block for upstream FT-CAT/DAE
+  # training and early stopping. The original 15% validation block remains
+  # reserved for learned-gate development and conformal calibration.
+  model_train_fraction: 0.9
 
 sequence:
   group_cols:
