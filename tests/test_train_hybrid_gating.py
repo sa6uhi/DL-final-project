@@ -10,9 +10,11 @@ from src.utils.config import Config
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
 from src.training.train_hybrid_gating import (
     GateData,
+    GateTrainingHistory,
     build_gate_features,
     evaluate_gate_loss,
     load_checkpoint,
+    load_training_history,
     make_gate_loader,
     save_checkpoint,
     validate_gate_data,
@@ -55,11 +57,105 @@ def test_checkpoint_roundtrip(tmp_path: Path) -> None:
     assert restored_normalizer.state_dict() == normalizer.state_dict()
 
 
+def test_training_history_checkpoint_roundtrip(tmp_path: Path) -> None:
+    """Saved gate training history should be restored exactly."""
+    model = LearnedHybridGate(
+        input_dim=2,
+        hidden_dims=[16, 8],
+        dropout=0.1,
+    )
+
+    normalizer = PercentileNormalizer(percentile=99.0).fit(
+        torch.tensor([0.1, 0.2, 0.3, 0.4], dtype=torch.float32)
+    )
+
+    history = GateTrainingHistory(
+        train_losses=[0.8, 0.6, 0.4],
+        val_losses=[0.9, 0.7, 0.5],
+        best_epoch=3,
+        best_val_loss=0.5,
+    )
+
+    checkpoint_path = tmp_path / "hybrid_gating_with_history.pt"
+
+    save_checkpoint(
+        model=model,
+        normalizer=normalizer,
+        path=checkpoint_path,
+        history=history,
+    )
+
+    restored_history = load_training_history(checkpoint_path)
+
+    assert restored_history == history
+
+
+def test_load_training_history_returns_none_when_absent(
+    tmp_path: Path,
+) -> None:
+    """Older checkpoints without training history should remain supported."""
+    model = LearnedHybridGate(
+        input_dim=2,
+        hidden_dims=[16, 8],
+        dropout=0.1,
+    )
+
+    normalizer = PercentileNormalizer(percentile=99.0).fit(
+        torch.tensor([0.1, 0.2, 0.3, 0.4], dtype=torch.float32)
+    )
+
+    checkpoint_path = tmp_path / "hybrid_gating_without_history.pt"
+
+    save_checkpoint(
+        model=model,
+        normalizer=normalizer,
+        path=checkpoint_path,
+    )
+
+    restored_history = load_training_history(checkpoint_path)
+
+    assert restored_history is None
+
+
+def test_load_training_history_rejects_malformed_history(
+    tmp_path: Path,
+) -> None:
+    """Malformed stored training history should fail with a clear error."""
+    checkpoint_path = tmp_path / "malformed_history.pt"
+
+    torch.save(
+        {
+            "training_history": {
+                "train_losses": [0.8, 0.6],
+                "val_losses": [0.9, 0.7],
+                "best_epoch": 2,
+                # best_val_loss intentionally missing
+            }
+        },
+        checkpoint_path,
+    )
+
+    try:
+        load_training_history(checkpoint_path)
+    except ValueError as exc:
+        assert "missing required fields" in str(exc)
+        assert "best_val_loss" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for malformed training history")
+
+
 def test_validate_gate_data_accepts_valid_input() -> None:
     """Valid gate data should pass validation without errors."""
     data = GateData(
         anomaly_scores=torch.tensor([0.1, 0.2, 0.3]),
         ft_probabilities=torch.tensor([0.2, 0.5, 0.8]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.0],
+                [0.4, 2.0],
+                [0.6, 3.0],
+            ]
+        ),
         labels=torch.tensor([0, 1, 0]),
     )
 
@@ -71,13 +167,19 @@ def test_validate_gate_data_rejects_mismatched_shapes() -> None:
     data = GateData(
         anomaly_scores=torch.tensor([0.1, 0.2]),
         ft_probabilities=torch.tensor([0.3]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.0],
+                [0.4, 2.0],
+            ]
+        ),
         labels=torch.tensor([0, 1]),
     )
 
     try:
         validate_gate_data(data)
     except ValueError as exc:
-        assert "matching shapes" in str(exc)
+        assert "matching sample counts" in str(exc)
     else:
         raise AssertionError("Expected ValueError for mismatched shapes")
 
@@ -87,6 +189,12 @@ def test_validate_gate_data_rejects_invalid_probability() -> None:
     data = GateData(
         anomaly_scores=torch.tensor([0.1, 0.2]),
         ft_probabilities=torch.tensor([0.5, 1.2]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.0],
+                [0.4, 2.0],
+            ]
+        ),
         labels=torch.tensor([0, 1]),
     )
 
@@ -103,6 +211,12 @@ def test_validate_gate_data_rejects_invalid_label() -> None:
     data = GateData(
         anomaly_scores=torch.tensor([0.1, 0.2]),
         ft_probabilities=torch.tensor([0.4, 0.8]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.0],
+                [0.4, 2.0],
+            ]
+        ),
         labels=torch.tensor([0, 2]),
     )
 
@@ -115,21 +229,30 @@ def test_validate_gate_data_rejects_invalid_label() -> None:
 
 
 def test_build_gate_features_returns_expected_shape() -> None:
-    """Feature builder should return one row per sample and two columns."""
+    """Feature builder should combine upstream signals and velocity context."""
     anomaly_scores = torch.tensor([0.1, 0.2, 0.3])
     ft_probabilities = torch.tensor([0.2, 0.5, 0.8])
+    velocity_features = torch.tensor(
+        [
+            [0.2, 1.0],
+            [0.4, 2.0],
+            [0.6, 3.0],
+        ]
+    )
 
     normalizer = PercentileNormalizer(percentile=100.0)
 
     features = build_gate_features(
         anomaly_scores,
         ft_probabilities,
+        velocity_features,
         normalizer,
         fit_normalizer=True,
     )
 
-    assert features.shape == (3, 2)
+    assert features.shape == (3, 4)
     assert torch.allclose(features[:, 1], ft_probabilities)
+    assert torch.allclose(features[:, 2:], velocity_features)
     assert torch.all(features[:, 0] >= 0.0)
     assert torch.all(features[:, 0] <= 1.0)
 
@@ -180,7 +303,7 @@ def test_train_gate_trains_and_saves_checkpoint(tmp_path: Path) -> None:
             "seed": 42,
             "hybrid_gating": {
                 "learned": {
-                    "input_dim": 2,
+                    "input_dim": 4,
                     "hidden_dims": [8],
                     "dropout": 0.0,
                     "normalize_percentile": 99.0,
@@ -201,12 +324,32 @@ def test_train_gate_trains_and_saves_checkpoint(tmp_path: Path) -> None:
     train_data = GateData(
         anomaly_scores=torch.tensor([0.1, 0.2, 0.3, 0.4, 2.0, 2.2, 2.4, 2.6]),
         ft_probabilities=torch.tensor([0.05, 0.10, 0.15, 0.20, 0.80, 0.85, 0.90, 0.95]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.0],
+                [0.2, 1.2],
+                [0.4, 1.4],
+                [0.4, 1.6],
+                [0.6, 2.0],
+                [0.6, 2.2],
+                [0.8, 2.4],
+                [1.0, 2.6],
+            ]
+        ),
         labels=torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
     )
 
     val_data = GateData(
         anomaly_scores=torch.tensor([0.15, 0.35, 2.1, 2.5]),
         ft_probabilities=torch.tensor([0.10, 0.20, 0.82, 0.92]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.1],
+                [0.4, 1.5],
+                [0.6, 2.1],
+                [0.8, 2.5],
+            ]
+        ),
         labels=torch.tensor([0, 0, 1, 1]),
     )
 

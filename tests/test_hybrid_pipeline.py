@@ -19,6 +19,7 @@ from src.training.hybrid_pipeline import (
     make_gate_data,
     train_hybrid_calibration_pipeline,
     transformer_probabilities,
+    velocity_features_from_frame,
 )
 from src.training.train_hybrid_gating import GateData
 from src.utils.config import Config
@@ -285,6 +286,10 @@ def test_make_gate_data_moves_tensors_to_cpu() -> None:
     data = make_gate_data(
         anomaly_scores=torch.tensor([1.0, 2.0], dtype=torch.float64),
         ft_probabilities=torch.tensor([0.2, 0.8], dtype=torch.float64),
+        velocity_features=torch.tensor(
+            [[0.2, 1.0], [0.8, 2.0]],
+            dtype=torch.float64,
+        ),
         labels=torch.tensor([0.0, 1.0], dtype=torch.float32),
     )
 
@@ -292,11 +297,72 @@ def test_make_gate_data_moves_tensors_to_cpu() -> None:
 
     assert data.anomaly_scores.device.type == "cpu"
     assert data.ft_probabilities.device.type == "cpu"
+    assert data.velocity_features.device.type == "cpu"
     assert data.labels.device.type == "cpu"
 
     assert data.anomaly_scores.dtype == torch.float32
     assert data.ft_probabilities.dtype == torch.float32
+    assert data.velocity_features.dtype == torch.float32
     assert data.labels.dtype == torch.int64
+
+
+def test_velocity_features_from_frame_extracts_sequence_context() -> None:
+    """Assert processed sequence history becomes learned-gate context."""
+    frame = pd.DataFrame(
+        {
+            "sequence_array": [
+                np.array(
+                    [
+                        [100.0, 1.0],
+                        [50.0, 2.0],
+                        [0.0, 0.0],
+                        [0.0, 0.0],
+                        [0.0, 0.0],
+                    ],
+                    dtype=np.float32,
+                ),
+                np.array(
+                    [
+                        [20.0, 1.0],
+                        [40.0, 2.0],
+                        [60.0, 3.0],
+                        [80.0, 4.0],
+                        [100.0, 5.0],
+                    ],
+                    dtype=np.float32,
+                ),
+            ]
+        }
+    )
+
+    features = velocity_features_from_frame(frame)
+
+    expected = torch.tensor(
+        [
+            [0.4, np.log1p(75.0)],
+            [1.0, np.log1p(60.0)],
+        ],
+        dtype=torch.float32,
+    )
+
+    assert features.shape == (2, 2)
+    assert torch.allclose(features, expected)
+
+
+def test_velocity_features_from_frame_rejects_missing_sequence() -> None:
+    """Assert velocity extraction requires historical sequence data."""
+    frame = pd.DataFrame({"isFraud": [0, 1]})
+
+    with pytest.raises(KeyError, match="sequence_array"):
+        velocity_features_from_frame(frame)
+
+
+def test_velocity_features_from_frame_rejects_empty_frame() -> None:
+    """Assert velocity extraction rejects an empty transaction split."""
+    frame = pd.DataFrame(columns=["sequence_array"])
+
+    with pytest.raises(ValueError, match="empty frame"):
+        velocity_features_from_frame(frame)
 
 
 def test_learned_gate_probabilities_reuses_existing_normalizer() -> None:
@@ -309,7 +375,7 @@ def test_learned_gate_probabilities_reuses_existing_normalizer() -> None:
     original_state = normalizer.state_dict().copy()
 
     gate = LearnedHybridGate(
-        input_dim=2,
+        input_dim=4,
         hidden_dims=[4],
         dropout=0.0,
     )
@@ -319,6 +385,12 @@ def test_learned_gate_probabilities_reuses_existing_normalizer() -> None:
         normalizer=normalizer,
         anomaly_scores=torch.tensor([10.0, 20.0]),
         ft_probabilities=torch.tensor([0.25, 0.75]),
+        velocity_features=torch.tensor(
+            [
+                [0.4, 1.5],
+                [0.8, 2.5],
+            ]
+        ),
     )
 
     assert probabilities.shape == (2,)
@@ -334,7 +406,7 @@ def test_learned_gate_probabilities_restores_training_mode() -> None:
     normalizer.fit(torch.tensor([1.0, 2.0, 3.0]))
 
     gate = LearnedHybridGate(
-        input_dim=2,
+        input_dim=4,
         hidden_dims=[4],
         dropout=0.0,
     )
@@ -345,6 +417,12 @@ def test_learned_gate_probabilities_restores_training_mode() -> None:
         normalizer=normalizer,
         anomaly_scores=torch.tensor([1.5, 2.5]),
         ft_probabilities=torch.tensor([0.2, 0.8]),
+        velocity_features=torch.tensor(
+            [
+                [0.4, 1.5],
+                [0.8, 2.5],
+            ]
+        ),
     )
 
     assert gate.training
@@ -357,7 +435,7 @@ def test_train_hybrid_calibration_pipeline_uses_conformal_data_after_gate_traini
             "seed": 42,
             "hybrid_gating": {
                 "learned": {
-                    "input_dim": 2,
+                    "input_dim": 4,
                     "hidden_dims": [4],
                     "dropout": 0.0,
                     "normalize_percentile": 99.9,
@@ -383,21 +461,39 @@ def test_train_hybrid_calibration_pipeline_uses_conformal_data_after_gate_traini
     gate_train_data = GateData(
         anomaly_scores=torch.tensor([1.0, 2.0]),
         ft_probabilities=torch.tensor([0.1, 0.9]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.0],
+                [0.8, 2.0],
+            ]
+        ),
         labels=torch.tensor([0, 1]),
     )
 
     gate_val_data = GateData(
         anomaly_scores=torch.tensor([1.5, 2.5]),
         ft_probabilities=torch.tensor([0.2, 0.8]),
+        velocity_features=torch.tensor(
+            [
+                [0.4, 1.5],
+                [1.0, 2.5],
+            ]
+        ),
         labels=torch.tensor([0, 1]),
     )
 
     conformal_anomaly_scores = torch.tensor([3.0, 4.0])
     conformal_ft_probabilities = torch.tensor([0.3, 0.7])
+    conformal_velocity_features = torch.tensor(
+        [
+            [0.6, 2.0],
+            [0.8, 3.0],
+        ]
+    )
     conformal_labels = torch.tensor([0, 1])
 
     gate = LearnedHybridGate(
-        input_dim=2,
+        input_dim=4,
         hidden_dims=[4],
         dropout=0.0,
     )
@@ -422,6 +518,7 @@ def test_train_hybrid_calibration_pipeline_uses_conformal_data_after_gate_traini
             gate_val_data=gate_val_data,
             conformal_anomaly_scores=conformal_anomaly_scores,
             conformal_ft_probabilities=conformal_ft_probabilities,
+            conformal_velocity_features=conformal_velocity_features,
             conformal_labels=conformal_labels,
             config=config,
             device="cpu",
@@ -439,6 +536,7 @@ def test_train_hybrid_calibration_pipeline_uses_conformal_data_after_gate_traini
         normalizer=normalizer,
         anomaly_scores=conformal_anomaly_scores,
         ft_probabilities=conformal_ft_probabilities,
+        velocity_features=conformal_velocity_features,
     )
 
     assert artifacts.gate is gate

@@ -5,20 +5,25 @@ central ``config/config.yaml`` so that tests are reproducible and run in
 under 15 seconds without the real IEEE-CIS dataset.
 """
 
+# Import necessary libraries and modules
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import matplotlib
 import numpy as np
 import pytest
 
 from src.utils.config import Config, load_config
 from src.utils.seed import seed_everything
 
+matplotlib.use("Agg")
+
 if TYPE_CHECKING:
     import torch
 
 
+# Define pytest fixtures for shared test data and configuration
 @pytest.fixture(scope="session")
 def config() -> Config:
     """Session-wide central configuration object."""

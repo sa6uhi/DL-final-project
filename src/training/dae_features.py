@@ -20,11 +20,16 @@ def resolve_dae_feature_columns(
     non_feature_cols: Sequence[str],
     expected_dim: int | None = None,
 ) -> list[str]:
-    """Resolve the ordered numeric feature columns consumed by the DAE.
+    """Resolve the ordered feature columns consumed by the DAE.
 
-    Column order is preserved exactly as it appears in the processed
-    DataFrame. The same resolver should therefore be used during DAE training
-    and later hybrid inference.
+    Processed IEEE-CIS data contains continuous features, missingness
+    indicators, and integer-encoded categorical features. When the expected
+    DAE width matches the continuous-plus-indicator contract, encoded
+    categorical IDs are excluded.
+
+    For generic or synthetic data without that processed-data contract, the
+    resolver falls back to the original behavior of selecting ordered numeric
+    columns. This keeps the helper reusable in tests and small experiments.
 
     Args:
         df: Processed transaction DataFrame.
@@ -32,7 +37,7 @@ def resolve_dae_feature_columns(
         expected_dim: Optional expected DAE input width.
 
     Returns:
-        Ordered list of numeric DAE feature columns.
+        Ordered list of DAE feature columns.
 
     Raises:
         ValueError: If no numeric features are available or the resolved
@@ -40,12 +45,41 @@ def resolve_dae_feature_columns(
     """
     excluded = set(non_feature_cols)
 
-    feature_cols = [
+    numeric_feature_cols = [
         col for col in df.columns if col not in excluded and is_numeric_dtype(df[col].dtype)
     ]
 
-    if not feature_cols:
+    if not numeric_feature_cols:
         raise ValueError("No numeric feature columns found for DAE")
+
+    indicator_suffix = "_is_nan"
+
+    indicator_cols = {
+        col
+        for col in df.columns
+        if col.endswith(indicator_suffix)
+        and col not in excluded
+        and is_numeric_dtype(df[col].dtype)
+    }
+
+    continuous_cols = {
+        col[: -len(indicator_suffix)]
+        for col in indicator_cols
+        if col[: -len(indicator_suffix)] in df.columns
+        and col[: -len(indicator_suffix)] not in excluded
+        and is_numeric_dtype(df[col[: -len(indicator_suffix)]].dtype)
+    }
+
+    continuous_indicator_cols = [
+        col
+        for col in df.columns
+        if col not in excluded and (col in continuous_cols or col in indicator_cols)
+    ]
+
+    if expected_dim is not None and len(continuous_indicator_cols) == expected_dim:
+        feature_cols = continuous_indicator_cols
+    else:
+        feature_cols = numeric_feature_cols
 
     if expected_dim is not None and len(feature_cols) != expected_dim:
         raise ValueError(

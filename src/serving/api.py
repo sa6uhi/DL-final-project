@@ -244,38 +244,100 @@ class Scorer:
             gate.eval()
 
     def _fuse(
-        self, anomaly_scores: np.ndarray, ft_probabilities: list[float] | None
+        self,
+        anomaly_scores: np.ndarray,
+        ft_probabilities: list[float] | None,
+        velocity_features: np.ndarray | None = None,
     ) -> tuple[np.ndarray, bool]:
-        """Fuse DAE residuals with FT posteriors when the gate is loaded.
+        """Fuse DAE residuals with supervised and historical gate context.
 
         Args:
             anomaly_scores: Per-sample raw DAE residual scores.
             ft_probabilities: Per-sample FT-Transformer posteriors, or None.
+            velocity_features: Optional array of shape ``(n_samples, 2)``
+                containing history density and amount intensity.
 
         Returns:
             ``(probabilities, gate_used)`` tuple.
 
         Raises:
-            ValueError: If the gate is loaded but posteriors are missing.
+            ValueError: If required learned-gate inputs are missing or malformed.
         """
         if self.gate is None or self.normalizer is None:
             return _score_to_probability(anomaly_scores, self.anomaly_const), False
+
         if ft_probabilities is None:
             raise ValueError("ft_probability is required when the hybrid gate is loaded")
+
         scores_t = torch.as_tensor(np.asarray(anomaly_scores, dtype=np.float32))
-        normalized = self.normalizer.transform(scores_t)
-        probs_t = torch.as_tensor(np.asarray(ft_probabilities, dtype=np.float32))
-        gate_in = torch.stack([normalized.reshape(-1), probs_t.reshape(-1)], dim=1)
+        normalized = self.normalizer.transform(scores_t).reshape(-1)
+
+        probs_t = torch.as_tensor(np.asarray(ft_probabilities, dtype=np.float32)).reshape(-1)
+
+        if probs_t.numel() != normalized.numel():
+            raise ValueError("ft_probabilities must match the anomaly-score batch size")
+
+        input_dim = int(self.gate.input_dim)
+
+        if input_dim == 2:
+            gate_in = torch.stack(
+                [normalized, probs_t],
+                dim=1,
+            )
+        elif input_dim == 4:
+            if velocity_features is None:
+                raise ValueError(
+                    "history_density and history_amount_intensity are required "
+                    "when the 4-input hybrid gate is loaded"
+                )
+
+            velocity_array = np.asarray(
+                velocity_features,
+                dtype=np.float32,
+            )
+
+            if velocity_array.ndim != 2 or velocity_array.shape[1] != 2:
+                raise ValueError("velocity_features must have shape (n_samples, 2)")
+
+            if velocity_array.shape[0] != normalized.numel():
+                raise ValueError("velocity_features must match the anomaly-score batch size")
+
+            if not np.isfinite(velocity_array).all():
+                raise ValueError("velocity_features must contain only finite values")
+
+            velocity_t = torch.as_tensor(velocity_array)
+
+            gate_in = torch.cat(
+                (
+                    torch.stack([normalized, probs_t], dim=1),
+                    velocity_t,
+                ),
+                dim=1,
+            )
+        else:
+            raise ValueError(f"Unsupported learned gate input dimension: {input_dim}")
+
         with torch.no_grad():
             fused = self.gate(gate_in).cpu().numpy()
+
         return fused, True
 
-    def score(self, features: list[float], ft_probability: float | None = None) -> dict[str, Any]:
+    def score(
+        self,
+        features: list[float],
+        ft_probability: float | None = None,
+        history_density: float | None = None,
+        history_amount_intensity: float | None = None,
+    ) -> dict[str, Any]:
         """Score a single transaction.
 
         Args:
             features: Feature vector of the transaction.
             ft_probability: Optional FT-Transformer posterior in ``[0, 1]``.
+            history_density: Optional historical activity density for the
+                4-input learned gate.
+            history_amount_intensity: Optional historical amount intensity
+                for the 4-input learned gate.
 
         Returns:
             Dict with ``is_fraud``, ``fraud_probability``, ``anomaly_score``,
@@ -291,8 +353,24 @@ class Scorer:
         x = torch.as_tensor(np.asarray([features], dtype=np.float32))
         with torch.no_grad():
             score = self.model.anomaly_score(x, l1_gamma=self.l1_gamma).item()
+
+        velocity_features = None
+
+        if history_density is not None or history_amount_intensity is not None:
+            if history_density is None or history_amount_intensity is None:
+                raise ValueError(
+                    "history_density and history_amount_intensity " "must be provided together"
+                )
+
+            velocity_features = np.asarray(
+                [[history_density, history_amount_intensity]],
+                dtype=np.float32,
+            )
+
         probabilities, gate_used = self._fuse(
-            np.asarray([score]), [ft_probability] if ft_probability is not None else None
+            np.asarray([score]),
+            [ft_probability] if ft_probability is not None else None,
+            velocity_features,
         )
         probability = float(probabilities[0])
         decision, is_fraud = _decide(
@@ -307,13 +385,18 @@ class Scorer:
         }
 
     def score_batch(
-        self, features_batch: list[list[float]], ft_probabilities: list[float] | None = None
+        self,
+        features_batch: list[list[float]],
+        ft_probabilities: list[float] | None = None,
+        velocity_features: np.ndarray | None = None,
     ) -> list[dict[str, Any]]:
         """Score multiple transactions in one forward pass.
 
         Args:
             features_batch: Batch of feature vectors.
             ft_probabilities: Optional batch of FT-Transformer posteriors.
+            velocity_features: Optional array of shape ``(n_samples, 2)``
+                containing history density and amount intensity.
 
         Returns:
             Per-transaction score dicts in request order.
@@ -330,7 +413,11 @@ class Scorer:
         x = torch.as_tensor(np.asarray(features_batch, dtype=np.float32))
         with torch.no_grad():
             scores = self.model.anomaly_score(x, l1_gamma=self.l1_gamma).cpu().numpy()
-        probabilities, gate_used = self._fuse(scores, ft_probabilities)
+        probabilities, gate_used = self._fuse(
+            scores,
+            ft_probabilities,
+            velocity_features,
+        )
         results: list[dict[str, Any]] = []
         for score, probability in zip(scores, probabilities):
             decision, is_fraud = _decide(
@@ -441,7 +528,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         """Score a single transaction end-to-end."""
         start = time.perf_counter()
         try:
-            result = app.state.scorer.score(request.features, request.ft_probability)
+            result = app.state.scorer.score(
+                request.features,
+                request.ft_probability,
+                request.history_density,
+                request.history_amount_intensity,
+            )
         except ValueError as exc:
             app.state.errors_total += 1
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -470,8 +562,41 @@ def create_app(config: Config | None = None) -> FastAPI:
                 raise ValueError("ft_probability must be set for all or none of the batch")
             else:
                 ft_probs_arg = [float(p) for p in ft_probs]
+
+            densities = [t.history_density for t in request.transactions]
+            intensities = [t.history_amount_intensity for t in request.transactions]
+
+            velocity_missing = [
+                density is None or intensity is None
+                for density, intensity in zip(
+                    densities,
+                    intensities,
+                )
+            ]
+
+            if all(velocity_missing):
+                velocity_arg = None
+            elif any(velocity_missing):
+                raise ValueError(
+                    "history_density and history_amount_intensity "
+                    "must be set for all or none of the batch"
+                )
+            else:
+                velocity_arg = np.asarray(
+                    [
+                        [float(density), float(intensity)]
+                        for density, intensity in zip(
+                            densities,
+                            intensities,
+                        )
+                    ],
+                    dtype=np.float32,
+                )
+
             results_raw = app.state.scorer.score_batch(
-                [t.features for t in request.transactions], ft_probs_arg
+                [t.features for t in request.transactions],
+                ft_probs_arg,
+                velocity_arg,
             )
         except ValueError as exc:
             app.state.errors_total += 1

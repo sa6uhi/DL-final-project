@@ -8,6 +8,9 @@ The experiment expects an NPZ archive containing:
     eval_scores
     probabilities_ft
     labels
+
+For a four-input history-aware learned gate, the archive must also contain:
+    velocity_features
 """
 
 # Import necessary libraries and modules
@@ -83,8 +86,12 @@ def evaluate_learned_gate(
     labels: np.ndarray,
     checkpoint_path: str | Path,
     max_fpr: float,
+    velocity_features: np.ndarray | None = None,
 ) -> tuple[dict[str, float], np.ndarray]:
-    """Evaluate the trained learned hybrid gate.
+    """Evaluate a trained learned hybrid gate.
+
+    Supports both the legacy two-signal gate and the newer four-input
+    history-aware gate.
 
     Args:
         eval_scores: DAE anomaly scores on the held-out evaluation split.
@@ -92,21 +99,61 @@ def evaluate_learned_gate(
         labels: Binary fraud labels for evaluation samples.
         checkpoint_path: Path to the trained learned-gate checkpoint.
         max_fpr: False-positive-rate operating point for TPR reporting.
+        velocity_features: Optional historical context array with shape
+            ``(n_samples, 2)`` containing history density and historical
+            amount intensity. Required for four-input learned gates.
 
     Returns:
         Tuple containing evaluation metrics and learned prediction scores.
+
+    Raises:
+        ValueError: If a four-input checkpoint is evaluated without valid
+            velocity features, or if the checkpoint input dimension is
+            unsupported.
     """
     model, normalizer = load_checkpoint(checkpoint_path, device="cpu")
 
-    features = build_gate_features(
-        anomaly_scores=torch.as_tensor(eval_scores, dtype=torch.float32),
-        transformer_probabilities=torch.as_tensor(
-            probabilities_ft,
-            dtype=torch.float32,
-        ),
-        normalizer=normalizer,
-        fit_normalizer=False,
+    anomaly_tensor = torch.as_tensor(
+        eval_scores,
+        dtype=torch.float32,
     )
+    probability_tensor = torch.as_tensor(
+        probabilities_ft,
+        dtype=torch.float32,
+    )
+
+    if model.input_dim == 2:
+        normalized_scores = normalizer.transform(anomaly_tensor)
+
+        features = torch.stack(
+            (
+                normalized_scores.reshape(-1),
+                probability_tensor.reshape(-1),
+            ),
+            dim=1,
+        )
+
+    elif model.input_dim == 4:
+        if velocity_features is None:
+            raise ValueError(
+                "velocity_features are required when evaluating " "a four-input learned gate"
+            )
+
+        velocity_tensor = torch.as_tensor(
+            velocity_features,
+            dtype=torch.float32,
+        )
+
+        features = build_gate_features(
+            anomaly_scores=anomaly_tensor,
+            transformer_probabilities=probability_tensor,
+            velocity_features=velocity_tensor,
+            normalizer=normalizer,
+            fit_normalizer=False,
+        )
+
+    else:
+        raise ValueError(f"Unsupported learned gate input dimension: {model.input_dim}")
 
     with torch.no_grad():
         learned_scores = model(features).numpy()
@@ -117,7 +164,11 @@ def evaluate_learned_gate(
         max_fpr=max_fpr,
     )
 
-    logger.info("Learned gate -> %s", metrics)
+    logger.info(
+        "Learned gate input_dim=%d -> %s",
+        model.input_dim,
+        metrics,
+    )
 
     return metrics, learned_scores
 
@@ -365,12 +416,15 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     logger.info("Evaluating learned hybrid gate...")
+    velocity_features = bundle.get("velocity_features")
+
     learned_metrics, learned_scores = evaluate_learned_gate(
         eval_scores=bundle["eval_scores"],
         probabilities_ft=bundle["probabilities_ft"],
         labels=bundle["labels"],
         checkpoint_path=checkpoint_path,
         max_fpr=max_fpr,
+        velocity_features=velocity_features,
     )
 
     figure_path = config.get_path("paths.figures") / "hybrid_gating" / "hybrid_gating_ablation.png"

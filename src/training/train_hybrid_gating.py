@@ -23,10 +23,11 @@ DEFAULT_CHECKPOINT = Path("models/checkpoints/hybrid_gating.pt")
 
 @dataclass(frozen=True)
 class GateData:
-    """Raw upstream fraud signals and labels for one data split."""
+    """Raw upstream fraud signals, velocity context, and labels for one split."""
 
     anomaly_scores: torch.Tensor
     ft_probabilities: torch.Tensor
+    velocity_features: torch.Tensor
     labels: torch.Tensor
 
 
@@ -41,24 +42,23 @@ class GateTrainingHistory:
 
 
 def validate_gate_data(data: GateData, name: str = "gate_data") -> None:
-    """Validate upstream signals and labels used to train the learned gate.
+    """Validate signals, velocity features, and labels for learned-gate training.
 
     Args:
         data: Gate inputs and binary fraud labels.
         name: Human-readable split name used in error messages.
 
     Raises:
-        ValueError: If tensors are empty, not one-dimensional, have different
-            lengths, contain non-finite values, or contain invalid labels or
-            probabilities.
+        ValueError: If tensors have invalid shapes, lengths, values, labels,
+            or probability ranges.
     """
-    tensors = {
+    one_dimensional_tensors = {
         "anomaly_scores": data.anomaly_scores,
         "ft_probabilities": data.ft_probabilities,
         "labels": data.labels,
     }
 
-    for tensor_name, tensor in tensors.items():
+    for tensor_name, tensor in one_dimensional_tensors.items():
         if tensor.ndim != 1:
             raise ValueError(f"{name}.{tensor_name} must be one-dimensional")
 
@@ -68,8 +68,26 @@ def validate_gate_data(data: GateData, name: str = "gate_data") -> None:
         if not torch.isfinite(tensor).all():
             raise ValueError(f"{name}.{tensor_name} must contain only finite values")
 
-    if not (data.anomaly_scores.shape == data.ft_probabilities.shape == data.labels.shape):
-        raise ValueError(f"{name} tensors must have matching shapes")
+    if data.velocity_features.ndim != 2:
+        raise ValueError(f"{name}.velocity_features must be two-dimensional")
+
+    if data.velocity_features.shape[0] == 0:
+        raise ValueError(f"{name}.velocity_features must not be empty")
+
+    if data.velocity_features.shape[1] == 0:
+        raise ValueError(f"{name}.velocity_features must contain at least one feature")
+
+    if not torch.isfinite(data.velocity_features).all():
+        raise ValueError(f"{name}.velocity_features must contain only finite values")
+
+    n_samples = data.anomaly_scores.shape[0]
+
+    if (
+        data.ft_probabilities.shape[0] != n_samples
+        or data.labels.shape[0] != n_samples
+        or data.velocity_features.shape[0] != n_samples
+    ):
+        raise ValueError(f"{name} tensors must have matching sample counts")
 
     if ((data.ft_probabilities < 0.0) | (data.ft_probabilities > 1.0)).any():
         raise ValueError(f"{name}.ft_probabilities must be in [0, 1]")
@@ -81,40 +99,64 @@ def validate_gate_data(data: GateData, name: str = "gate_data") -> None:
 def build_gate_features(
     anomaly_scores: torch.Tensor,
     transformer_probabilities: torch.Tensor,
+    velocity_features: torch.Tensor,
     normalizer: PercentileNormalizer,
     fit_normalizer: bool = False,
 ) -> torch.Tensor:
-    """Build the two-feature input matrix for the learned gate.
+    """Build the learned-gate feature matrix.
+
+    The learned gate combines:
+
+    1. Normalized DAE anomaly score.
+    2. FT-CAT fraud probability.
+    3. Causal transaction-velocity features derived from historical context.
 
     Args:
         anomaly_scores: Raw DAE anomaly scores of shape ``(n_samples,)``.
         transformer_probabilities: FT-CAT fraud probabilities of shape
             ``(n_samples,)``.
+        velocity_features: Causal velocity features of shape
+            ``(n_samples, n_velocity_features)``.
         normalizer: Percentile normalizer for anomaly scores.
-        fit_normalizer: Whether to fit the normalizer before transforming.
+        fit_normalizer: Whether to fit the anomaly normalizer before
+            transforming.
 
     Returns:
-        Tensor of shape ``(n_samples, 2)`` containing normalized anomaly
-        scores and Transformer fraud probabilities.
+        Tensor of shape
+        ``(n_samples, 2 + n_velocity_features)``.
 
     Raises:
         ValueError: If inputs have invalid shapes, lengths, values, or
             probability ranges.
     """
-    if anomaly_scores.dim() != 1 or transformer_probabilities.dim() != 1:
-        raise ValueError("Gate inputs must be one-dimensional tensors")
+    if anomaly_scores.ndim != 1:
+        raise ValueError("Anomaly scores must be one-dimensional")
 
-    if anomaly_scores.shape != transformer_probabilities.shape:
-        raise ValueError("Anomaly scores and Transformer probabilities must have matching shapes")
+    if transformer_probabilities.ndim != 1:
+        raise ValueError("Transformer probabilities must be one-dimensional")
+
+    if velocity_features.ndim != 2:
+        raise ValueError("Velocity features must be two-dimensional")
 
     if anomaly_scores.numel() == 0:
         raise ValueError("Gate inputs must not be empty")
+
+    n_samples = anomaly_scores.shape[0]
+
+    if transformer_probabilities.shape[0] != n_samples or velocity_features.shape[0] != n_samples:
+        raise ValueError("Gate inputs must contain matching sample counts")
+
+    if velocity_features.shape[1] == 0:
+        raise ValueError("Velocity features must contain at least one feature")
 
     if not torch.isfinite(anomaly_scores).all():
         raise ValueError("Anomaly scores must contain only finite values")
 
     if not torch.isfinite(transformer_probabilities).all():
         raise ValueError("Transformer probabilities must contain only finite values")
+
+    if not torch.isfinite(velocity_features).all():
+        raise ValueError("Velocity features must contain only finite values")
 
     if ((transformer_probabilities < 0.0) | (transformer_probabilities > 1.0)).any():
         raise ValueError("Transformer probabilities must be in [0, 1]")
@@ -124,8 +166,19 @@ def build_gate_features(
     else:
         normalized_anomaly = normalizer.transform(anomaly_scores)
 
-    return torch.stack(
-        (normalized_anomaly, transformer_probabilities),
+    base_features = torch.stack(
+        (
+            normalized_anomaly,
+            transformer_probabilities,
+        ),
+        dim=1,
+    )
+
+    return torch.cat(
+        (
+            base_features,
+            velocity_features.float(),
+        ),
         dim=1,
     )
 
@@ -307,6 +360,71 @@ def load_checkpoint(
     return model, normalizer
 
 
+def load_training_history(
+    path: str | Path,
+    device: str = "cpu",
+) -> GateTrainingHistory | None:
+    """Restore optional learned-gate training history from a checkpoint.
+
+    Args:
+        path: Checkpoint file created by :func:`save_checkpoint`.
+        device: Device used when loading the checkpoint payload.
+
+    Returns:
+        Restored training history when present, otherwise ``None``.
+
+    Raises:
+        FileNotFoundError: If the checkpoint file does not exist.
+        ValueError: If stored training-history metadata is malformed.
+    """
+    checkpoint_path = Path(path)
+
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    payload: dict[str, Any] = torch.load(
+        checkpoint_path,
+        map_location=device,
+        weights_only=False,
+    )
+
+    history_state = payload.get("training_history")
+
+    if history_state is None:
+        return None
+
+    if not isinstance(history_state, dict):
+        raise ValueError("Checkpoint training history must be a dictionary")
+
+    required_keys = {
+        "train_losses",
+        "val_losses",
+        "best_epoch",
+        "best_val_loss",
+    }
+
+    missing_keys = required_keys.difference(history_state)
+
+    if missing_keys:
+        missing = ", ".join(sorted(missing_keys))
+        raise ValueError(f"Checkpoint training history is missing required fields: {missing}")
+
+    try:
+        train_losses = [float(value) for value in history_state["train_losses"]]
+        val_losses = [float(value) for value in history_state["val_losses"]]
+        best_epoch = int(history_state["best_epoch"])
+        best_val_loss = float(history_state["best_val_loss"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Checkpoint training history contains invalid values") from exc
+
+    return GateTrainingHistory(
+        train_losses=train_losses,
+        val_losses=val_losses,
+        best_epoch=best_epoch,
+        best_val_loss=best_val_loss,
+    )
+
+
 def train_gate(
     train_data: GateData,
     val_data: GateData,
@@ -373,6 +491,7 @@ def train_gate(
     train_features = build_gate_features(
         anomaly_scores=train_data.anomaly_scores,
         transformer_probabilities=train_data.ft_probabilities,
+        velocity_features=train_data.velocity_features,
         normalizer=normalizer,
         fit_normalizer=True,
     )
@@ -380,6 +499,7 @@ def train_gate(
     val_features = build_gate_features(
         anomaly_scores=val_data.anomaly_scores,
         transformer_probabilities=val_data.ft_probabilities,
+        velocity_features=val_data.velocity_features,
         normalizer=normalizer,
         fit_normalizer=False,
     )
