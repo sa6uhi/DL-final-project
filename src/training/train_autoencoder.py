@@ -5,6 +5,7 @@ processed parquet splits, with early stopping on validation reconstruction
 loss and checkpointing to ``models/checkpoints/autoencoder.pt``.
 """
 
+# Import necessary modules and libraries
 from __future__ import annotations
 
 import argparse
@@ -18,6 +19,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.models.autoencoder import DenoisingAutoencoder
+from src.training.dae_features import resolve_dae_feature_columns
 from src.utils.config import Config, load_config
 from src.utils.logger import get_logger, setup_logging
 from src.utils.seed import seed_everything
@@ -325,17 +327,15 @@ def _load_legit_features(
     if not file_path.is_file():
         raise FileNotFoundError(f"Data split not found: {file_path}")
 
-    from pandas.api.types import is_numeric_dtype
-
     df = pd.read_parquet(file_path)
-    numeric_cols = [
-        col for col in df.columns if col not in non_feature_cols and is_numeric_dtype(df[col].dtype)
-    ]
-    if not numeric_cols:
-        raise ValueError(f"No numeric feature columns found in {file_path}")
+
+    feature_cols = resolve_dae_feature_columns(
+        df,
+        non_feature_cols=non_feature_cols,
+    )
 
     legit = df[df[target_col] == 0]
-    features = legit[numeric_cols].to_numpy(dtype=np.float32)
+    features = legit[feature_cols].to_numpy(dtype=np.float32)
     logger.info(
         "Loaded %d legit transactions with %d features from %s",
         features.shape[0],
