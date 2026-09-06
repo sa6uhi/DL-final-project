@@ -20,6 +20,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from src.models.autoencoder import DenoisingAutoencoder
 from src.training.dae_features import resolve_dae_feature_columns
+from src.training.model_development import create_model_development_split
 from src.utils.config import Config, load_config
 from src.utils.logger import get_logger, setup_logging
 from src.utils.seed import seed_everything
@@ -301,79 +302,171 @@ def _validate(
     return total / max(count, 1)
 
 
-def _load_legit_features(
-    path: str | Path, non_feature_cols: Sequence[str], target_col: str = "isFraud"
+def _legit_features_from_frame(
+    df: pd.DataFrame,
+    non_feature_cols: Sequence[str],
+    target_col: str = "isFraud",
+    feature_cols: Sequence[str] | None = None,
+    expected_dim: int | None = None,
 ) -> np.ndarray:
-    """Load a feature matrix of legitimate transactions from a parquet split.
-
-    Selects all numeric (continuous) columns except identifiers and the
-    target, then keeps only rows labelled ``isFraud == 0`` since the DAE is
-    trained exclusively on legitimate transactions.
+    """Extract ordered numeric DAE features from legitimate transactions.
 
     Args:
-        path: Path to a processed ``.parquet`` split.
-        non_feature_cols: Columns that are never model features (ids, target,
-            sequence tensor).
-        target_col: Name of the binary fraud label column.
+        df: Processed transaction DataFrame.
+        non_feature_cols: Columns excluded from DAE inputs.
+        target_col: Binary fraud-label column.
+        feature_cols: Optional fixed feature contract. When omitted, the
+            contract is resolved from ``df``.
+        expected_dim: Optional expected number of DAE input features.
 
     Returns:
-        Float32 feature matrix of shape ``(n_legit, n_features)``.
+        Float32 feature matrix containing legitimate transactions only.
+    """
+    if target_col not in df.columns:
+        raise ValueError(f"Missing target column: {target_col}")
 
-    Raises:
-        FileNotFoundError: If the parquet file does not exist.
-        ValueError: If no numeric feature columns are found.
+    if feature_cols is None:
+        resolved_feature_cols = resolve_dae_feature_columns(
+            df,
+            non_feature_cols=non_feature_cols,
+            expected_dim=expected_dim,
+        )
+    else:
+        resolved_feature_cols = list(feature_cols)
+
+        missing = [col for col in resolved_feature_cols if col not in df.columns]
+        if missing:
+            raise ValueError(f"Missing DAE feature columns: {missing}")
+
+        if expected_dim is not None and len(resolved_feature_cols) != expected_dim:
+            raise ValueError(
+                "DAE feature dimension mismatch: "
+                f"expected {expected_dim}, got {len(resolved_feature_cols)}"
+            )
+
+    legit = df[df[target_col] == 0]
+
+    if legit.empty:
+        raise ValueError("No legitimate transactions found for DAE")
+
+    return legit.loc[:, resolved_feature_cols].to_numpy(
+        dtype=np.float32,
+        copy=True,
+    )
+
+
+def _load_legit_features(
+    path: str | Path,
+    non_feature_cols: Sequence[str],
+    target_col: str = "isFraud",
+    feature_cols: Sequence[str] | None = None,
+    expected_dim: int | None = None,
+) -> np.ndarray:
+    """Load legitimate DAE features from a processed parquet split.
+
+    Args:
+        path: Path to a processed parquet split.
+        non_feature_cols: Columns excluded from DAE inputs.
+        target_col: Binary fraud-label column.
+        feature_cols: Optional fixed DAE feature contract.
+        expected_dim: Optional expected number of DAE input features.
+
+    Returns:
+        Float32 feature matrix containing legitimate transactions only.
     """
     file_path = Path(path)
+
     if not file_path.is_file():
         raise FileNotFoundError(f"Data split not found: {file_path}")
 
     df = pd.read_parquet(file_path)
 
-    feature_cols = resolve_dae_feature_columns(
+    features = _legit_features_from_frame(
         df,
         non_feature_cols=non_feature_cols,
+        target_col=target_col,
+        feature_cols=feature_cols,
+        expected_dim=expected_dim,
     )
 
-    legit = df[df[target_col] == 0]
-    features = legit[feature_cols].to_numpy(dtype=np.float32)
     logger.info(
         "Loaded %d legit transactions with %d features from %s",
         features.shape[0],
         features.shape[1],
         file_path,
     )
+
     return features
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entry point for training the autoencoder.
-
-    Args:
-        argv: Command line arguments; uses ``sys.argv`` when omitted.
-    """
-    parser = argparse.ArgumentParser(description="Train the Deep DAE autoencoder on legit data")
-    parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG))
-    parser.add_argument("--train-data", type=str, default=None, help="parquet of legit features")
-    parser.add_argument(
-        "--val-data", type=str, default=None, help="optional parquet of legit features"
-    )
-    parser.add_argument("--out", type=str, default=str(DEFAULT_CHECKPOINT))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--train-data", type=Path, default=None)
+    parser.add_argument("--val-data", type=Path, default=None)
+    parser.add_argument("--out", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument("--device", type=str, default="cpu")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
     setup_logging(
-        level=str(config.logging.level), log_file=str(config.get_path("logging.log_file"))
+        level=str(config.logging.level),
+        log_file=str(config.get_path("logging.log_file")),
     )
     seed_everything(int(config.seed))
 
     non_feature_cols = list(config.data.non_feature_cols)
+    expected_dim = int(config.autoencoder.input_dim)
     train_path = args.train_data or config.get_path("data.train_data_path")
-    val_path = args.val_data or config.get_path("data.val_data_path")
 
-    train_x = _load_legit_features(train_path, non_feature_cols)
-    val_x = _load_legit_features(val_path, non_feature_cols)
-    train_autoencoder(train_x, config, val_x, out_path=args.out, device=args.device)
+    train_df = pd.read_parquet(train_path)
+
+    if args.val_data is None:
+        model_train_df, model_val_df = create_model_development_split(
+            train_df,
+            config,
+        )
+    else:
+        model_train_df = train_df
+        model_val_df = None
+
+    feature_cols = resolve_dae_feature_columns(
+        model_train_df,
+        non_feature_cols=non_feature_cols,
+        expected_dim=expected_dim,
+    )
+
+    train_x = _legit_features_from_frame(
+        model_train_df,
+        non_feature_cols,
+        feature_cols=feature_cols,
+        expected_dim=expected_dim,
+    )
+
+    if args.val_data is None:
+        assert model_val_df is not None
+
+        val_x = _legit_features_from_frame(
+            model_val_df,
+            non_feature_cols,
+            feature_cols=feature_cols,
+            expected_dim=expected_dim,
+        )
+    else:
+        val_x = _load_legit_features(
+            args.val_data,
+            non_feature_cols,
+            feature_cols=feature_cols,
+            expected_dim=expected_dim,
+        )
+
+    train_autoencoder(
+        train_x,
+        config,
+        val_x,
+        out_path=args.out,
+        device=args.device,
+    )
 
 
 if __name__ == "__main__":

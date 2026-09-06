@@ -478,7 +478,18 @@ def test_main_trains_from_parquet_cli(tmp_path: Path) -> None:
     prev_configured = logger_module._configured
     logger_module._configured = False
     try:
-        main(["--config", str(config_file), "--out", str(out), "--device", "cpu"])
+        main(
+            [
+                "--config",
+                str(config_file),
+                "--val-data",
+                str(val_path),
+                "--out",
+                str(out),
+                "--device",
+                "cpu",
+            ]
+        )
     finally:
         for handler in list(root_logger.handlers):
             if handler not in prev_handlers:

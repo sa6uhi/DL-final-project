@@ -36,6 +36,7 @@ from src.models.ft_transformer import (
 )
 from src.models.losses import build_loss
 from src.training.feature_selection import FeatureSpec, resolve_feature_set
+from src.training.model_development import create_model_development_split
 from src.training.trainer_utils import (
     AmpPolicy,
     EarlyStopping,
@@ -697,12 +698,36 @@ def main(argv: list[str] | None = None) -> None:
     seed_everything(run_seed)
 
     train_df = _load_split(args.train_data or config.get_path("data.train_data_path"))
-    val_df = _load_split(args.val_data or config.get_path("data.val_data_path"))
 
-    spec = resolve_feature_set(config, train_df=train_df)
-    train_bundle = materialize_tensors(train_df, spec)
-    val_bundle = materialize_tensors(val_df, spec)
-    del train_df, val_df
+    if args.val_data is None:
+        model_train_df, model_val_df = create_model_development_split(
+            train_df,
+            config,
+        )
+        force_refresh_features = True
+    else:
+        # An explicit --val-data override is preserved for experiments/tests.
+        model_train_df = train_df
+        model_val_df = _load_split(args.val_data)
+        force_refresh_features = False
+
+    spec = resolve_feature_set(
+        config,
+        train_df=model_train_df,
+        force_refresh=force_refresh_features,
+    )
+
+    train_bundle = materialize_tensors(
+        model_train_df,
+        spec,
+    )
+
+    val_bundle = materialize_tensors(
+        model_val_df,
+        spec,
+    )
+
+    del train_df, model_train_df, model_val_df
 
     if args.subsample:
         sub_cfg = config.transformer.subsample
