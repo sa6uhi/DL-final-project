@@ -1,6 +1,9 @@
 """Unit tests for :mod:`src.models.hybrid_gating`."""
 
+# Import necessary modules and libraries
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 import torch
@@ -10,6 +13,8 @@ from src.models.hybrid_gating import (
     LearnedHybridGate,
     PercentileNormalizer,
 )
+from src.training.train_hybrid_gating import GateData, train_gate
+from src.utils.config import load_config
 
 
 @pytest.fixture()
@@ -308,3 +313,57 @@ def test_learned_gate_eval_mode_is_deterministic(
     second_output = learned_gate(feature_batch)
 
     assert torch.allclose(first_output, second_output)
+
+
+def test_train_gate_checkpoint_path_override(tmp_path: Path) -> None:
+    """Train gate saves to the explicitly requested checkpoint path."""
+    config = load_config("config/config.yaml")
+
+    config.hybrid_gating.learned.training.epochs = 2
+    config.hybrid_gating.learned.training.patience = 1
+    config.hybrid_gating.learned.training.batch_size = 4
+
+    train_data = GateData(
+        anomaly_scores=torch.tensor([0.10, 0.20, 0.30, 0.40, 0.60, 0.70, 0.80, 0.90]),
+        ft_probabilities=torch.tensor([0.05, 0.10, 0.20, 0.30, 0.70, 0.80, 0.90, 0.95]),
+        velocity_features=torch.tensor(
+            [
+                [0.10, 0.20],
+                [0.20, 0.30],
+                [0.30, 0.40],
+                [0.40, 0.50],
+                [0.60, 0.70],
+                [0.70, 0.80],
+                [0.80, 0.90],
+                [0.90, 1.00],
+            ]
+        ),
+        labels=torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+    )
+
+    val_data = GateData(
+        anomaly_scores=torch.tensor([0.15, 0.35, 0.65, 0.85]),
+        ft_probabilities=torch.tensor([0.10, 0.25, 0.75, 0.90]),
+        velocity_features=torch.tensor(
+            [
+                [0.15, 0.25],
+                [0.35, 0.45],
+                [0.65, 0.75],
+                [0.85, 0.95],
+            ]
+        ),
+        labels=torch.tensor([0, 0, 1, 1]),
+    )
+
+    override_path = tmp_path / "seed_123.pt"
+
+    train_gate(
+        train_data=train_data,
+        val_data=val_data,
+        config=config,
+        device="cpu",
+        checkpoint_path=override_path,
+    )
+
+    assert override_path.is_file()
+    assert not (tmp_path / "hybrid_gating.pt").exists()

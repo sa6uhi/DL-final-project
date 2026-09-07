@@ -430,6 +430,7 @@ def train_gate(
     val_data: GateData,
     config: Config,
     device: str | None = None,
+    checkpoint_path: str | Path | None = None,
 ) -> tuple[LearnedHybridGate, PercentileNormalizer]:
     """Train the learned hybrid gate end-to-end and save its checkpoint.
 
@@ -439,6 +440,8 @@ def train_gate(
             early stopping and picking the best model weights.
         config: Central project configuration.
         device: Device to train on; auto-detected when ``None``.
+        checkpoint_path: Optional checkpoint destination override. When ``None``,
+            the configured learned-gate checkpoint path is used.
 
     Returns:
         Tuple of the trained gate (best weights restored) and the
@@ -633,12 +636,16 @@ def train_gate(
     model.eval()
 
     # Save trained gate checkpoint
-    checkpoint_path = Path(config.hybrid_gating.learned.checkpoint_path)
+    resolved_checkpoint_path = (
+        Path(checkpoint_path)
+        if checkpoint_path is not None
+        else Path(config.hybrid_gating.learned.checkpoint_path)
+    )
 
     save_checkpoint(
         model=model,
         normalizer=normalizer,
-        path=checkpoint_path,
+        path=resolved_checkpoint_path,
         history=history,
     )
 

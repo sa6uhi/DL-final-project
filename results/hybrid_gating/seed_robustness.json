@@ -1,0 +1,23 @@
+[
+  {
+    "seed": 42,
+    "pr_auc": 0.3419988373294506,
+    "roc_auc": 0.8373020517942794,
+    "tpr_at_fpr": 0.2292817679558011,
+    "checkpoint": "models\\checkpoints\\hybrid_gating_seed_42.pt"
+  },
+  {
+    "seed": 123,
+    "pr_auc": 0.32928196241141683,
+    "roc_auc": 0.8312397254216479,
+    "tpr_at_fpr": 0.23480662983425415,
+    "checkpoint": "models\\checkpoints\\hybrid_gating_seed_123.pt"
+  },
+  {
+    "seed": 2026,
+    "pr_auc": 0.34315400321588824,
+    "roc_auc": 0.8323896003058964,
+    "tpr_at_fpr": 0.2430939226519337,
+    "checkpoint": "models\\checkpoints\\hybrid_gating_seed_2026.pt"
+  }
+]
