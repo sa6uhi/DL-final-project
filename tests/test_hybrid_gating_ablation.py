@@ -281,3 +281,51 @@ def test_plot_gate_disagreement_saves_figure(tmp_path: Path) -> None:
 
     assert output_path.exists()
     assert output_path.stat().st_size > 0
+
+
+def test_evaluate_learned_gate_rejects_unsupported_input_dim(
+    tmp_path: Path,
+) -> None:
+    """Unsupported learned-gate feature dimensions fail clearly."""
+    anomaly_scores = torch.tensor(
+        [0.1, 0.2, 5.0, 6.0],
+        dtype=torch.float32,
+    )
+
+    probabilities_ft = np.array(
+        [0.05, 0.06, 0.90, 0.95],
+        dtype=np.float32,
+    )
+
+    labels = np.array(
+        [0, 0, 1, 1],
+        dtype=np.int64,
+    )
+
+    normalizer = PercentileNormalizer(percentile=99.0).fit(anomaly_scores)
+
+    model = LearnedHybridGate(
+        input_dim=3,
+        hidden_dims=[4],
+        dropout=0.0,
+    )
+
+    checkpoint_path = tmp_path / "hybrid_gating.pt"
+
+    save_checkpoint(
+        model=model,
+        normalizer=normalizer,
+        path=checkpoint_path,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Unsupported",
+    ):
+        evaluate_learned_gate(
+            eval_scores=anomaly_scores.numpy(),
+            probabilities_ft=probabilities_ft,
+            labels=labels,
+            checkpoint_path=checkpoint_path,
+            max_fpr=0.5,
+        )

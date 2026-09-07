@@ -8,10 +8,15 @@ import numpy as np
 import pytest
 import torch
 
+from src.models.ft_transformer import FTCATransformer
 from src.serving.model_serializer import (
+    FTTransformerExportModule,
+    HybridGateExportModule,
     ReferenceEncoder,
     build_reference_model,
     export_exir,
+    export_ft_transformer,
+    export_hybrid_gate,
     export_onnx,
     load_exir,
     verify_parity,
@@ -195,3 +200,339 @@ def test_resolve_model_prefers_trained_checkpoint(tmp_path: Path) -> None:
     assert source == input_dir / "autoencoder.pt"
     sample = torch.randn(2, 8)
     assert torch.allclose(resolved.anomaly_score(sample), model.anomaly_score(sample), atol=1e-6)
+
+
+def test_hybrid_gate_export_module_matches_original() -> None:
+    """Export-safe gate wrapper preserves learned-gate probabilities."""
+    from src.models.hybrid_gating import LearnedHybridGate
+
+    torch.manual_seed(42)
+
+    gate = LearnedHybridGate(
+        input_dim=4,
+        hidden_dims=[16, 8],
+        dropout=0.1,
+    )
+    gate.eval()
+
+    wrapper = HybridGateExportModule(gate)
+    wrapper.eval()
+
+    sample = torch.randn(8, 4)
+
+    with torch.no_grad():
+        expected = gate(sample)
+        actual = wrapper(sample)
+
+    assert torch.allclose(expected, actual, atol=1e-7)
+
+
+def test_export_hybrid_gate_realistic_checkpoint(tmp_path: Path) -> None:
+    """Learned-gate checkpoint exports to EXIR and ONNX with numerical parity."""
+    from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
+    from src.training.train_hybrid_gating import save_checkpoint
+
+    torch.manual_seed(42)
+
+    gate = LearnedHybridGate(
+        input_dim=4,
+        hidden_dims=[16, 8],
+        dropout=0.1,
+    )
+    gate.eval()
+
+    normalizer = PercentileNormalizer()
+    normalizer.fit(torch.tensor([1.0, 2.0, 3.0, 4.0]))
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    output_dir = tmp_path / "serialized"
+    checkpoint_dir.mkdir()
+
+    save_checkpoint(
+        model=gate,
+        normalizer=normalizer,
+        path=checkpoint_dir / "hybrid_gating.pt",
+    )
+
+    report = export_hybrid_gate(
+        checkpoint_dir,
+        output_dir,
+    )
+
+    assert (output_dir / "hybrid_gating.pt2").is_file()
+    assert (output_dir / "hybrid_gating.onnx").is_file()
+
+    assert report["exir_max_diff"] <= 2.0e-3
+    assert report["onnx_max_diff"] <= 2.0e-3
+
+
+def test_ft_transformer_export_wrapper_matches_original() -> None:
+    """Export-safe FT-CAT wrapper preserves original model logits."""
+    torch.manual_seed(42)
+
+    model = FTCATransformer(
+        n_continuous=3,
+        categorical_cardinalities=[4, 5],
+        seq_len=5,
+        seq_dim=2,
+        d_model=8,
+        n_heads=2,
+        dim_feedforward=16,
+        n_layers=1,
+        dropout=0.0,
+        use_cross_attention=True,
+    )
+    model.eval()
+
+    wrapper = FTTransformerExportModule(model)
+    wrapper.eval()
+
+    x_cont = torch.randn(4, 3)
+    x_cat = torch.tensor(
+        [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 4],
+        ],
+        dtype=torch.long,
+    )
+    seq = torch.randn(4, 5, 2)
+
+    with torch.no_grad():
+        expected = model(x_cont, x_cat, seq)
+        actual = wrapper(x_cont, x_cat, seq)
+
+    assert torch.allclose(expected, actual, atol=1e-7)
+
+
+def _build_small_ft_transformer() -> FTCATransformer:
+    """Build a compact deterministic FT-CAT model for serialization tests."""
+    torch.manual_seed(42)
+
+    model = FTCATransformer(
+        n_continuous=3,
+        categorical_cardinalities=[4, 5],
+        seq_len=5,
+        seq_dim=2,
+        d_model=8,
+        n_heads=2,
+        dim_feedforward=16,
+        n_layers=1,
+        dropout=0.0,
+        use_cross_attention=True,
+    )
+    model.eval()
+    return model
+
+
+def _ft_transformer_sample() -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]:
+    """Return valid FT-CAT inputs with realistic tensor dtypes."""
+    x_cont = torch.randn(4, 3)
+
+    x_cat = torch.tensor(
+        [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 4],
+        ],
+        dtype=torch.long,
+    )
+
+    seq = torch.randn(4, 5, 2)
+
+    return x_cont, x_cat, seq
+
+
+def test_ft_transformer_exir_parity(tmp_path: Path) -> None:
+    """FT-CAT EXIR output matches the original PyTorch model."""
+    model = _build_small_ft_transformer()
+    wrapper = FTTransformerExportModule(model)
+    wrapper.eval()
+
+    x_cont, x_cat, seq = _ft_transformer_sample()
+
+    batch_dim = torch.export.Dim("batch")
+    dynamic_shapes = (
+        {0: batch_dim},
+        {0: batch_dim},
+        {0: batch_dim},
+    )
+
+    path = tmp_path / "ft_transformer.pt2"
+
+    with torch.no_grad():
+        exported = torch.export.export(
+            wrapper,
+            (x_cont, x_cat, seq),
+            dynamic_shapes=dynamic_shapes,
+        )
+        torch.export.save(exported, path)
+
+    assert path.is_file()
+
+    loaded = torch.export.load(str(path)).module()
+
+    with torch.no_grad():
+        expected = model(x_cont, x_cat, seq)
+        actual = loaded(x_cont, x_cat, seq)
+
+    assert torch.allclose(
+        expected,
+        actual,
+        atol=2.0e-3,
+        rtol=0.0,
+    )
+
+
+def test_ft_transformer_onnx_parity(tmp_path: Path) -> None:
+    """FT-CAT ONNX output matches the original PyTorch model."""
+    onnxruntime = pytest.importorskip("onnxruntime")
+
+    model = _build_small_ft_transformer()
+    wrapper = FTTransformerExportModule(model)
+    wrapper.eval()
+
+    x_cont, x_cat, seq = _ft_transformer_sample()
+
+    path = tmp_path / "ft_transformer.onnx"
+
+    batch_dim = torch.export.Dim("batch")
+    dynamic_shapes = (
+        {0: batch_dim},
+        {0: batch_dim},
+        {0: batch_dim},
+    )
+
+    with torch.no_grad():
+        torch.onnx.export(
+            wrapper,
+            (x_cont, x_cat, seq),
+            str(path),
+            input_names=[
+                "continuous_features",
+                "categorical_features",
+                "history",
+            ],
+            output_names=["fraud_logits"],
+            dynamic_shapes=dynamic_shapes,
+            opset_version=18,
+        )
+
+    assert path.is_file()
+
+    session = onnxruntime.InferenceSession(
+        str(path),
+        providers=["CPUExecutionProvider"],
+    )
+
+    inputs = {
+        session.get_inputs()[0].name: x_cont.numpy(),
+        session.get_inputs()[1].name: x_cat.numpy(),
+        session.get_inputs()[2].name: seq.numpy(),
+    }
+
+    actual = session.run(None, inputs)[0]
+
+    with torch.no_grad():
+        expected = model(x_cont, x_cat, seq).numpy()
+
+    assert np.abs(expected - actual).max() <= 2.0e-3
+
+
+def test_ft_transformer_exir_dynamic_batch(tmp_path: Path) -> None:
+    """FT-CAT EXIR graph accepts batch sizes different from the export sample."""
+    model = _build_small_ft_transformer()
+    wrapper = FTTransformerExportModule(model)
+    wrapper.eval()
+
+    x_cont, x_cat, seq = _ft_transformer_sample()
+
+    batch_dim = torch.export.Dim("batch")
+    dynamic_shapes = (
+        {0: batch_dim},
+        {0: batch_dim},
+        {0: batch_dim},
+    )
+
+    path = tmp_path / "ft_dynamic.pt2"
+
+    with torch.no_grad():
+        exported = torch.export.export(
+            wrapper,
+            (x_cont, x_cat, seq),
+            dynamic_shapes=dynamic_shapes,
+        )
+        torch.export.save(exported, path)
+
+    loaded = torch.export.load(str(path)).module()
+
+    x_cont_large = torch.randn(9, 3)
+    x_cat_large = torch.zeros(9, 2, dtype=torch.long)
+    seq_large = torch.randn(9, 5, 2)
+
+    with torch.no_grad():
+        output = loaded(
+            x_cont_large,
+            x_cat_large,
+            seq_large,
+        )
+
+    assert output.shape == (9,)
+
+
+def test_export_ft_transformer_checkpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FT-CAT checkpoint export creates EXIR and ONNX artifacts."""
+    from src.serving import model_serializer
+
+    model = _build_small_ft_transformer()
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    output_dir = tmp_path / "serialized"
+    checkpoint_dir.mkdir()
+
+    checkpoint_path = checkpoint_dir / "ft_transformer.pt"
+    checkpoint_path.touch()
+
+    payload = {
+        "feature_spec": {
+            "continuous_cols": ["a", "b", "c"],
+            "categorical_cols": ["cat1", "cat2"],
+            "categorical_cardinalities": [4, 5],
+            "sequence_cols": ["s1", "s2"],
+            "seq_len": 5,
+        }
+    }
+
+    def fake_load_ft_transformer(
+        path: str | Path,
+        device: str = "cpu",
+    ) -> tuple[FTCATransformer, dict]:
+        assert Path(path) == checkpoint_path
+        assert device == "cpu"
+        return model, payload
+
+    monkeypatch.setattr(
+        model_serializer,
+        "load_ft_transformer",
+        fake_load_ft_transformer,
+    )
+
+    report = export_ft_transformer(
+        checkpoint_dir,
+        output_dir,
+    )
+
+    assert (output_dir / "ft_transformer.pt2").is_file()
+    assert (output_dir / "ft_transformer.onnx").is_file()
+
+    assert report["exir_max_diff"] <= 2.0e-3
+    assert report["onnx_max_diff"] <= 2.0e-3

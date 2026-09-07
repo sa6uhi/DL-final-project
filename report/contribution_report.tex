@@ -1,0 +1,177 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1.5cm]{geometry}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{ragged2e}
+\usepackage{fontspec}
+\usepackage{microtype}
+\usepackage[table]{xcolor}
+
+\setmainfont{Liberation Serif}
+\newfontfamily\azfont{DejaVu Serif}
+
+\definecolor{darkgreen}{RGB}{24,92,69}
+\definecolor{lightgreen}{RGB}{232,242,237}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\renewcommand{\arraystretch}{1.25}
+
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
+
+\begin{document}
+
+\begin{center}
+    {\LARGE\bfseries\color{darkgreen} Contribution Report}\\[4pt]
+    {\large Deep Learning Final Project}\\[3pt]
+    {\bfseries Real-Time Financial Fraud Detection with Learned Hybrid Gating\\
+    and Uncertainty-Aware Triage}\\[8pt]
+
+    AI Academy, National Artificial Intelligence Center, Azerbaijan
+\end{center}
+
+\vspace{4pt}
+
+\noindent
+This report summarizes the agreed division of work and principal contributions
+of the four project members. The project was developed collaboratively, with
+each member owning a major technical component while contributing to integration,
+testing, experimentation, documentation, and final project delivery.
+
+\vspace{8pt}
+
+\small
+
+\begin{tabularx}{\textwidth}{
+    >{\RaggedRight\arraybackslash}p{2.25cm}
+    Y Y Y Y Y
+}
+\toprule
+\rowcolor{lightgreen}
+\textbf{Member Name} &
+\textbf{Code} &
+\textbf{Report Sections} &
+\textbf{Experiments} &
+\textbf{Slides} &
+\textbf{Other} \\
+\midrule
+
+{\azfont Əskərov Nadir} &
+Data pipeline, temporal splitting, preprocessing, historical sequence extraction,
+dataset/DataLoader components, classical baselines, evaluation metrics and cost
+analysis. &
+Dataset protocol, chronological splitting, sequence protocol, baseline methodology
+and results. &
+Baseline benchmarking and historical sequence-window ablation. &
+Dataset characteristics, sequence representation, and baseline results. &
+Prepared the leakage-aware data foundation and processed inputs used by downstream
+models. \\
+
+\midrule
+
+{\azfont Fətəliyev Akşin} &
+FT-CAT Transformer, feature tokenization, self-attention and temporal
+cross-attention, focal-loss components, and supervised transformer training. &
+FT-CAT architecture, attention methodology, focal-loss design, and supervised
+deep-learning methodology/results. &
+FT-CAT architecture ablation and focal-loss sensitivity analysis assigned as the
+supervised-model experiments. &
+Primary ownership and coordination of the final 15--20 minute presentation deck,
+including architecture and model-result slides. &
+Produced the supervised deep-learning branch and trained FT-CAT model checkpoint. \\
+
+\midrule
+
+{\azfont Nəzərov Səbuhi} &
+Denoising autoencoder, autoencoder training, centralized utilities, serving
+schemas/API, model serialization, Docker/CI infrastructure, and reproduction
+tooling. &
+DAE methodology, serving architecture, deployment notes, and latency evaluation. &
+Autoencoder anomaly evaluation and latency/throughput evaluation. &
+DAE, serving, deployment, and system-integration material. &
+Developed the anomaly-detection and serving/deployment foundation, including
+FastAPI, serialization, containerization, CI/CD, and reproduction tooling. \\
+
+\midrule
+
+{\azfont Hüseynov Habil} &
+Learned hybrid gating, conformal prediction and triage, SHAP explainability,
+Streamlit analyst dashboard, integration and robustness testing, and supporting
+evaluation/serialization work. &
+Introduction, related work, learned gating, conformal prediction, XAI analysis,
+results interpretation, discussion/limitations, conclusion, and final IEEE paper
+assembly. &
+Learned-vs-fixed gating evaluation, multi-seed gate robustness, conformal
+coverage/workload evaluation, SHAP consistency analysis, DAE latent-space t-SNE,
+and CPU inference benchmarking/integration. &
+Conformal triage, learned gating, XAI, dashboard, and final result/deployment
+material. &
+Compiled the final IEEE report; implemented and validated the analyst dashboard;
+performed final Member-D integration, regression testing, artifact validation,
+and contribution-report assembly. \\
+
+\bottomrule
+\end{tabularx}
+
+\normalsize
+
+\vspace{12pt}
+
+\section*{\color{darkgreen}Individual Contribution Summary}
+
+\textbf{{\azfont Əskərov Nadir} --- Data \& Sequence Lead.}
+Responsible for the data and sequence-processing foundation of the system,
+including leakage-aware chronological splitting, preprocessing, historical
+transaction sequence construction, classical machine-learning baselines, and
+core evaluation definitions.
+
+\textbf{{\azfont Fətəliyev Akşin} --- Supervised Transformer Lead.}
+Responsible for the supervised FT-CAT branch, including feature tokenization,
+self-attention, temporal cross-attention, focal-loss formulation, supervised
+training, and coordination of the final presentation deck.
+
+\textbf{{\azfont Nəzərov Səbuhi} --- Self-Supervised Anomaly \& Serving Lead.}
+Responsible for the denoising autoencoder and the principal engineering and
+deployment infrastructure, including centralized utilities, FastAPI serving,
+model serialization, Docker/CI integration, and reproducibility tooling.
+
+\textbf{{\azfont Hüseynov Habil} --- Learned Gating, Conformal \& UI Lead.}
+Responsible for learned hybrid fusion, uncertainty-aware conformal triage,
+DAE-focused SHAP explainability, the Streamlit analyst interface, latent-space
+visualization, gating and conformal experiments, robustness evaluation, final
+IEEE report compilation, and contribution-report assembly.
+
+\vspace{10pt}
+
+\section*{\color{darkgreen}Team Agreement}
+
+The members confirm that the contribution summary above reflects the agreed
+division of responsibilities and project work. The system was integrated and
+evaluated collaboratively, and all members contributed to the completion of the
+final project.
+
+\vspace{16pt}
+
+\begin{tabularx}{\textwidth}{X X}
+\textbf{{\azfont Əskərov Nadir}} &
+\textbf{{\azfont Fətəliyev Akşin}} \\[16pt]
+Signature: \hrulefill &
+Signature: \hrulefill \\[20pt]
+
+\textbf{{\azfont Hüseynov Habil}} &
+\textbf{{\azfont Nəzərov Səbuhi}} \\[16pt]
+Signature: \hrulefill &
+Signature: \hrulefill \\
+\end{tabularx}
+
+\vfill
+
+\begin{center}
+\small
+Deep Learning Final Project --- AI Academy\\
+National Artificial Intelligence Center, Azerbaijan
+\end{center}
+
+\end{document}

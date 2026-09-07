@@ -336,7 +336,7 @@ def sweep_alpha(
 def plot_coverage_vs_workload(
     results: list[dict[str, float]],
     output_path: str | Path,
-    show_plot: bool = True,
+    show_plot: bool = False,
 ) -> None:
     """Plot empirical coverage against human-review workload."""
     if not results:
@@ -493,7 +493,7 @@ def export_experiment_metadata(
 def plot_threshold_sensitivity(
     results: list[dict[str, float]],
     output_path: str | Path,
-    show_plot: bool = True,
+    show_plot: bool = False,
 ) -> None:
     """Plot conformal threshold sensitivity across alpha values."""
     if not results:

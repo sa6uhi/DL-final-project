@@ -366,3 +366,77 @@ def test_train_gate_trains_and_saves_checkpoint(tmp_path: Path) -> None:
     assert isinstance(normalizer, PercentileNormalizer)
     assert not model.training
     assert checkpoint_path.is_file()
+
+
+def test_train_gate_respects_checkpoint_path_override(
+    tmp_path: Path,
+) -> None:
+    """Explicit checkpoint path overrides the configured default path."""
+    default_checkpoint = tmp_path / "default" / "hybrid_gating.pt"
+    override_checkpoint = tmp_path / "override" / "hybrid_gating.pt"
+
+    config = Config(
+        {
+            "seed": 42,
+            "hybrid_gating": {
+                "learned": {
+                    "input_dim": 4,
+                    "hidden_dims": [8],
+                    "dropout": 0.0,
+                    "normalize_percentile": 99.0,
+                    "training": {
+                        "lr": 1.0e-2,
+                        "weight_decay": 0.0,
+                        "epochs": 5,
+                        "batch_size": 4,
+                        "early_stopping_patience": 3,
+                        "min_delta": 0.0,
+                    },
+                    "checkpoint_path": str(default_checkpoint),
+                }
+            },
+        }
+    )
+
+    train_data = GateData(
+        anomaly_scores=torch.tensor([0.1, 0.2, 0.3, 0.4, 2.0, 2.2, 2.4, 2.6]),
+        ft_probabilities=torch.tensor([0.05, 0.10, 0.15, 0.20, 0.80, 0.85, 0.90, 0.95]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.0],
+                [0.2, 1.2],
+                [0.4, 1.4],
+                [0.4, 1.6],
+                [0.6, 2.0],
+                [0.6, 2.2],
+                [0.8, 2.4],
+                [1.0, 2.6],
+            ]
+        ),
+        labels=torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+    )
+
+    val_data = GateData(
+        anomaly_scores=torch.tensor([0.15, 0.35, 2.1, 2.5]),
+        ft_probabilities=torch.tensor([0.10, 0.20, 0.82, 0.92]),
+        velocity_features=torch.tensor(
+            [
+                [0.2, 1.1],
+                [0.4, 1.5],
+                [0.6, 2.1],
+                [0.8, 2.5],
+            ]
+        ),
+        labels=torch.tensor([0, 0, 1, 1]),
+    )
+
+    train_gate(
+        train_data=train_data,
+        val_data=val_data,
+        config=config,
+        device="cpu",
+        checkpoint_path=override_checkpoint,
+    )
+
+    assert override_checkpoint.is_file()
+    assert not default_checkpoint.is_file()

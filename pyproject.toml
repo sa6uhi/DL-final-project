@@ -23,6 +23,8 @@ addopts = "-ra"
 filterwarnings = [
     "error::DeprecationWarning",
     "ignore::FutureWarning:copyreg",
+    "ignore::PendingDeprecationWarning:shap.plots.colors._colors",
+    "ignore::UserWarning:torch.onnx._internal.exporter._onnx_program",
 ]
 
 [tool.coverage.report]

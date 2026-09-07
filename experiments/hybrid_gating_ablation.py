@@ -225,7 +225,7 @@ def plot_gate_disagreement(
     learned_scores: np.ndarray,
     labels: np.ndarray,
     output_path: str | Path,
-    show_plot: bool = True,
+    show_plot: bool = False,
 ) -> None:
     """Plot fixed versus learned gate scores to highlight disagreements."""
     fixed_scores = np.asarray(fixed_scores, dtype=float)
@@ -297,7 +297,7 @@ def plot_gate_comparison(
     fixed_metrics: dict[str, float],
     learned_metrics: dict[str, float],
     output_path: str | Path,
-    show_plot: bool = True,
+    show_plot: bool = False,
 ) -> None:
     """Plot fixed-alpha versus learned-gate performance.
 

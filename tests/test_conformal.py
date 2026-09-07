@@ -157,3 +157,14 @@ def test_conformal_quantile_rejects_scores_outside_unit_interval() -> None:
 
     with pytest.raises(ValueError, match=r"\[0, 1\]"):
         conformal_quantile(scores, alpha=0.1)
+
+
+def test_conformal_quantile_rejects_non_finite_scores() -> None:
+    """Conformal calibration rejects NaN calibration scores."""
+    scores = torch.tensor([0.1, float("nan"), 0.3])
+
+    with pytest.raises(ValueError, match="finite"):
+        conformal_quantile(
+            scores,
+            alpha=0.1,
+        )

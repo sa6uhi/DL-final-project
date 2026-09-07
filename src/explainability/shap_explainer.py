@@ -27,6 +27,13 @@ class DAEAnomalyScoreWrapper(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Return differentiable per-sample DAE anomaly scores."""
         reconstruction = self.model(x)
+
+        if reconstruction.shape != x.shape:
+            raise ValueError(
+                f"Model output shape {tuple(reconstruction.shape)} does not "
+                f"match input shape {tuple(x.shape)}"
+            )
+
         residual = x - reconstruction
 
         scores = residual.pow(2).sum(dim=-1)

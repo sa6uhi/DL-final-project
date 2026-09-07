@@ -1,0 +1,22 @@
+{
+  "experiment": "conformal_triage_evaluation",
+  "created_at_utc": "2026-09-07T07:37:41.618427+00:00",
+  "archive_path": "results\\conformal\\conformal_inputs.npz",
+  "seed": 42,
+  "alpha_sweep": [
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.2
+  ],
+  "calibration_size": 44291,
+  "evaluation_size": 88581,
+  "bootstrap_resamples": 500,
+  "bootstrap_confidence_level": 0.95,
+  "ece_bins": 10,
+  "python_version": "3.13.15",
+  "torch_version": "2.14.0+cpu",
+  "numpy_version": "2.5.2",
+  "git_commit": "72c1cdbaab9c4dbaec1ed88008d60cf42c078eb2"
+}
