@@ -23,6 +23,7 @@ addopts = "-ra"
 filterwarnings = [
     "error::DeprecationWarning",
     "ignore::FutureWarning:copyreg",
+    "ignore::PendingDeprecationWarning:shap.plots.colors._colors",
 ]
 
 [tool.coverage.report]
