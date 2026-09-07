@@ -1,0 +1,152 @@
+{
+  "device": "cpu",
+  "torch_version": "2.14.0+cpu",
+  "warmup_runs": 10,
+  "measured_runs": 50,
+  "results": [
+    {
+      "component": "DAE",
+      "batch_size": 1,
+      "mean_latency_ms": 0.46494199998051045,
+      "median_latency_ms": 0.4232999995110731,
+      "p90_latency_ms": 0.5024299998694914,
+      "p99_latency_ms": 1.1101379998308394,
+      "throughput_transactions_per_second": 2150.805907063501
+    },
+    {
+      "component": "FT-CAT",
+      "batch_size": 1,
+      "mean_latency_ms": 4.894999999996799,
+      "median_latency_ms": 5.052799999702984,
+      "p90_latency_ms": 6.351319999521365,
+      "p99_latency_ms": 8.051620000105682,
+      "throughput_transactions_per_second": 204.29009193067498
+    },
+    {
+      "component": "Learned Gate",
+      "batch_size": 1,
+      "mean_latency_ms": 0.14938200007236446,
+      "median_latency_ms": 0.12229999947521719,
+      "p90_latency_ms": 0.17383000040354094,
+      "p99_latency_ms": 0.6020050003644424,
+      "throughput_transactions_per_second": 6694.246960916137
+    },
+    {
+      "component": "End-to-End Neural Pipeline",
+      "batch_size": 1,
+      "mean_latency_ms": 7.8061699999489065,
+      "median_latency_ms": 6.5570499996283615,
+      "p90_latency_ms": 10.226929999680582,
+      "p99_latency_ms": 26.950980999472446,
+      "throughput_transactions_per_second": 128.10379481955238
+    },
+    {
+      "component": "DAE",
+      "batch_size": 32,
+      "mean_latency_ms": 1.6824199999973644,
+      "median_latency_ms": 1.356700000087585,
+      "p90_latency_ms": 2.7668199998515774,
+      "p99_latency_ms": 5.037071000106148,
+      "throughput_transactions_per_second": 19020.22087234468
+    },
+    {
+      "component": "FT-CAT",
+      "batch_size": 32,
+      "mean_latency_ms": 15.889748000026884,
+      "median_latency_ms": 13.762950000000274,
+      "p90_latency_ms": 19.083630000295674,
+      "p99_latency_ms": 45.5375739999726,
+      "throughput_transactions_per_second": 2013.8771237873539
+    },
+    {
+      "component": "Learned Gate",
+      "batch_size": 32,
+      "mean_latency_ms": 0.17900800003189943,
+      "median_latency_ms": 0.17264999996768893,
+      "p90_latency_ms": 0.21238000017547165,
+      "p99_latency_ms": 0.24141599959875748,
+      "throughput_transactions_per_second": 178762.96028276705
+    },
+    {
+      "component": "End-to-End Neural Pipeline",
+      "batch_size": 32,
+      "mean_latency_ms": 15.296605999956228,
+      "median_latency_ms": 14.896849999786355,
+      "p90_latency_ms": 17.701759999454225,
+      "p99_latency_ms": 24.077706999996728,
+      "throughput_transactions_per_second": 2091.967329229214
+    },
+    {
+      "component": "DAE",
+      "batch_size": 128,
+      "mean_latency_ms": 2.470785999994405,
+      "median_latency_ms": 1.7996000001403445,
+      "p90_latency_ms": 2.8205499998875894,
+      "p99_latency_ms": 15.97347699970664,
+      "throughput_transactions_per_second": 51805.37691256542
+    },
+    {
+      "component": "FT-CAT",
+      "batch_size": 128,
+      "mean_latency_ms": 40.881480000007286,
+      "median_latency_ms": 39.499549999618466,
+      "p90_latency_ms": 48.680330000024696,
+      "p99_latency_ms": 55.95236299982389,
+      "throughput_transactions_per_second": 3131.002106576797
+    },
+    {
+      "component": "Learned Gate",
+      "batch_size": 128,
+      "mean_latency_ms": 0.13992999993206467,
+      "median_latency_ms": 0.13755000009041396,
+      "p90_latency_ms": 0.15478000032089767,
+      "p99_latency_ms": 0.20409800006746065,
+      "throughput_transactions_per_second": 914743.0862727319
+    },
+    {
+      "component": "End-to-End Neural Pipeline",
+      "batch_size": 128,
+      "mean_latency_ms": 46.62149400000999,
+      "median_latency_ms": 44.940199999928154,
+      "p90_latency_ms": 57.955220000167174,
+      "p99_latency_ms": 67.55617199991319,
+      "throughput_transactions_per_second": 2745.5147619244585
+    },
+    {
+      "component": "DAE",
+      "batch_size": 512,
+      "mean_latency_ms": 5.594213999956992,
+      "median_latency_ms": 5.484699999669829,
+      "p90_latency_ms": 7.716579999578244,
+      "p99_latency_ms": 9.245856999787064,
+      "throughput_transactions_per_second": 91523.13443925031
+    },
+    {
+      "component": "FT-CAT",
+      "batch_size": 512,
+      "mean_latency_ms": 234.34629800001858,
+      "median_latency_ms": 207.89774999957444,
+      "p90_latency_ms": 326.8414000000121,
+      "p99_latency_ms": 361.3743360003445,
+      "throughput_transactions_per_second": 2184.8008881282153
+    },
+    {
+      "component": "Learned Gate",
+      "batch_size": 512,
+      "mean_latency_ms": 0.22368800000549527,
+      "median_latency_ms": 0.21104999950694037,
+      "p90_latency_ms": 0.2815799998643343,
+      "p99_latency_ms": 0.4042060002029757,
+      "throughput_transactions_per_second": 2288902.399714879
+    },
+    {
+      "component": "End-to-End Neural Pipeline",
+      "batch_size": 512,
+      "mean_latency_ms": 190.15731399998913,
+      "median_latency_ms": 189.72764999989522,
+      "p90_latency_ms": 222.7409500005706,
+      "p99_latency_ms": 290.84469100005657,
+      "throughput_transactions_per_second": 2692.5075308963883
+    }
+  ]
+}
