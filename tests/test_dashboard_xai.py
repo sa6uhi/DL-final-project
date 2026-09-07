@@ -269,33 +269,48 @@ def test_safe_metric_missing_value_returns_none() -> None:
 # ---------------------------------------------------------------------------
 # XAI artifact contract
 # ---------------------------------------------------------------------------
-def test_shap_consistency_summary_uses_real_jaccard_keys() -> None:
-    """Dashboard XAI contract should match the SHAP experiment output."""
-    summary = {
-        "mean_top_k_jaccard": 0.47619,
-        "min_top_k_jaccard": 0.42857,
-        "mean_spearman_correlation": 0.89240,
-        "min_spearman_correlation": 0.88846,
-    }
+def test_explainability_sampling_consistency_renders_real_metrics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sampling Consistency renders metrics from the real SHAP result keys."""
+    results_path = tmp_path / "dae_shap_consistency.json"
+    results_path.write_text(
+        json.dumps(
+            {
+                "summary": {
+                    "mean_top_k_jaccard": 0.47619,
+                    "min_top_k_jaccard": 0.42857,
+                    "mean_spearman_correlation": 0.89240,
+                    "min_spearman_correlation": 0.88846,
+                }
+            }
+        )
+    )
 
-    assert summary["mean_top_k_jaccard"] == pytest.approx(0.47619)
-    assert summary["min_top_k_jaccard"] == pytest.approx(0.42857)
+    monkeypatch.setattr(
+        "src.dashboard.app.SHAP_CONSISTENCY_RESULTS",
+        results_path,
+    )
 
+    app = AppTest.from_file(str(APP_PATH))
+    app.run(timeout=20)
 
-def test_shap_consistency_summary_uses_real_spearman_keys() -> None:
-    """Spearman tiles should use the keys exported by shap_consistency.py."""
-    summary = {
-        "mean_top_k_jaccard": 0.47619,
-        "min_top_k_jaccard": 0.42857,
-        "mean_spearman_correlation": 0.89240,
-        "min_spearman_correlation": 0.88846,
-    }
+    nav_target = next(option for option in app.radio[0].options if "Explainability" in option)
+    app.radio[0].set_value(nav_target)
+    app.run(timeout=20)
 
-    assert summary["mean_spearman_correlation"] == pytest.approx(0.89240)
-    assert summary["min_spearman_correlation"] == pytest.approx(0.88846)
+    app.selectbox[0].set_value("Sampling Consistency")
+    app.run(timeout=20)
 
-    assert "mean_spearman" not in summary
-    assert "min_spearman" not in summary
+    assert len(app.exception) == 0
+
+    values = {metric.label: metric.value for metric in app.metric}
+
+    assert values["Mean Spearman"] == "0.892"
+    assert values["Min Spearman"] == "0.888"
+    assert values["Mean Top-K Jaccard"] == "0.476"
+    assert values["Min Top-K Jaccard"] == "0.429"
 
 
 def test_shap_component_contract_identifies_dae_only() -> None:

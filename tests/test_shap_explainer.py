@@ -158,3 +158,19 @@ def test_explain_transaction_returns_ranked_drivers() -> None:
     assert drivers[0]["feature_name"] in {"feature_0", "feature_1"}
     assert "attribution" in drivers[0]
     assert "value" in drivers[0]
+
+
+def test_dae_wrapper_rejects_mismatched_reconstruction_shape() -> None:
+    """DAE wrapper rejects models that do not return reconstructions."""
+
+    class ScoreOnlyModel(torch.nn.Module):
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x[:, :1] * 0.0
+
+    model = ScoreOnlyModel()
+    wrapper = DAEAnomalyScoreWrapper(model, l1_gamma=0.4)
+
+    x = torch.tensor([[1.0, 2.0]])
+
+    with pytest.raises(ValueError, match="does not match"):
+        wrapper(x)

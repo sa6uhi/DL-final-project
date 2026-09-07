@@ -10,17 +10,24 @@ TorchScript is replaced by ``torch.export`` (EXIR) which is the maintained
 portable graph format.
 """
 
+# Import necessary libraries and modules
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 from typing import Any
 
-import torch
 import onnxruntime
+import torch
 from torch import nn
 
+from src.models.ft_transformer import FTCATransformer
+from src.models.hybrid_gating import LearnedHybridGate
 from src.training.train_autoencoder import load_checkpoint
+from src.training.train_hybrid_gating import (
+    load_checkpoint as load_hybrid_gate_checkpoint,
+)
+from src.training.train_transformer import load_ft_transformer
 from src.utils.config import load_config
 from src.utils.logger import get_logger
 
@@ -333,42 +340,397 @@ def _resolve_model(input_dir: str | Path, config: dict) -> tuple[nn.Module, Path
     return model, source
 
 
-def export_all(input_dir: str | Path, output_dir: str | Path, config: dict) -> dict[str, float]:
-    """Export EXIR + ONNX artifacts and verify parity on a sample batch.
+class HybridGateExportModule(nn.Module):
+    """Export-safe wrapper around a trained learned hybrid gate."""
 
-    Both the deep autoencoder and the reference scorer expose
-    ``anomaly_score``; each is wrapped so the exported graph emits per-sample
-    scores of shape ``(batch, 1)`` with identical semantics.
+    def __init__(self, gate: LearnedHybridGate) -> None:
+        """Initialize the wrapper with the trained gate."""
+        super().__init__()
+        self.network = gate.network
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """Return fraud probabilities without Python-side validation branches."""
+        logits = self.network(features)
+        return torch.sigmoid(logits).squeeze(-1)
+
+
+class FTTransformerExportModule(nn.Module):
+    """Export-safe wrapper around a trained FT-CAT transformer."""
+
+    def __init__(self, model: FTCATransformer) -> None:
+        """Initialize the wrapper with the trained FT-CAT model."""
+        super().__init__()
+        self.model = model
+
+    def forward(
+        self,
+        x_cont: torch.Tensor,
+        x_cat: torch.Tensor,
+        seq: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return FT-CAT logits without Python-side validation branches."""
+        tokenizer = self.model.tokenizer
+        batch = x_cont.size(0)
+
+        tokens = [tokenizer.cls_token.expand(batch, -1, -1)]
+
+        if tokenizer.cont_weight is not None:
+            continuous_tokens = (
+                x_cont.unsqueeze(-1) * tokenizer.cont_weight.unsqueeze(0) + tokenizer.cont_bias
+            )
+            tokens.append(continuous_tokens)
+
+        for index, embedding in enumerate(tokenizer.cat_embeddings):
+            codes = x_cat[:, index]
+            tokens.append(embedding(codes).unsqueeze(1))
+
+        tokens_tensor = torch.cat(tokens, dim=1)
+        tokens_tensor = self.model.encoder(tokens_tensor)
+
+        if self.model.cross_attention is not None and self.model.history_encoder is not None:
+            memory = self.model.history_encoder(seq)
+            padding_mask = self.model.history_encoder.padding_mask(seq)
+
+            tokens_tensor, _ = self.model.cross_attention(
+                tokens_tensor,
+                memory,
+                key_padding_mask=padding_mask,
+                need_weights=False,
+            )
+
+        logits = self.model.head(self.model.head_norm(tokens_tensor[:, 0])).squeeze(-1)
+
+        return logits
+
+
+def export_ft_transformer(
+    input_dir: str | Path,
+    output_dir: str | Path,
+) -> dict[str, float]:
+    """Export the trained FT-CAT transformer to EXIR and ONNX."""
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    checkpoint_path = input_path / "ft_transformer.pt"
+
+    model, _ = load_ft_transformer(
+        checkpoint_path,
+        device="cpu",
+    )
+
+    if not isinstance(model, FTCATransformer):
+        raise TypeError("FT-CAT serialization requires an FTCATransformer checkpoint")
+
+    model.eval()
+
+    export_model = FTTransformerExportModule(model)
+    export_model.eval()
+
+    meta = model.state_meta()
+
+    batch_size = 4
+    n_continuous = int(meta["n_continuous"])
+    n_categorical = len(meta["categorical_cardinalities"])
+    seq_len = int(meta["seq_len"])
+    seq_dim = int(meta["seq_dim"])
+
+    x_cont = torch.randn(
+        batch_size,
+        n_continuous,
+        dtype=torch.float32,
+    )
+
+    x_cat = torch.zeros(
+        batch_size,
+        n_categorical,
+        dtype=torch.long,
+    )
+
+    seq = torch.randn(
+        batch_size,
+        seq_len,
+        seq_dim,
+        dtype=torch.float32,
+    )
+
+    exir_path = output_path / "ft_transformer.pt2"
+    onnx_path = output_path / "ft_transformer.onnx"
+
+    batch_dim = torch.export.Dim("batch")
+
+    dynamic_shapes = (
+        {0: batch_dim},
+        {0: batch_dim},
+        {0: batch_dim},
+    )
+
+    with torch.no_grad():
+        exported = torch.export.export(
+            export_model,
+            (x_cont, x_cat, seq),
+            dynamic_shapes=dynamic_shapes,
+        )
+        torch.export.save(exported, exir_path)
+
+    logger.info(
+        "Exported FT-CAT EXIR model to %s (dynamic batch)",
+        exir_path,
+    )
+
+    with torch.no_grad():
+        torch.onnx.export(
+            export_model,
+            (x_cont, x_cat, seq),
+            str(onnx_path),
+            input_names=[
+                "continuous_features",
+                "categorical_features",
+                "history",
+            ],
+            output_names=["fraud_logits"],
+            dynamic_shapes=dynamic_shapes,
+            opset_version=DEFAULT_OPSET,
+        )
+
+    logger.info(
+        "Exported FT-CAT ONNX model to %s (opset %d)",
+        onnx_path,
+        DEFAULT_OPSET,
+    )
+
+    with torch.no_grad():
+        reference_output = model(
+            x_cont,
+            x_cat,
+            seq,
+        )
+
+    exported_program = torch.export.load(str(exir_path))
+    exir_model = exported_program.module()
+
+    with torch.no_grad():
+        exir_output = exir_model(
+            x_cont,
+            x_cat,
+            seq,
+        )
+
+    exir_diff = float((reference_output - exir_output).abs().max().item())
+
+    if exir_diff > PARITY_TOLERANCE:
+        raise RuntimeError(
+            "FT-CAT EXIR parity failed: " f"max diff {exir_diff:.2e} > " f"{PARITY_TOLERANCE:.2e}"
+        )
+
+    onnx_session = onnxruntime.InferenceSession(
+        str(onnx_path),
+        providers=["CPUExecutionProvider"],
+    )
+
+    onnx_inputs = {
+        onnx_session.get_inputs()[0].name: x_cont.numpy(),
+        onnx_session.get_inputs()[1].name: x_cat.numpy(),
+        onnx_session.get_inputs()[2].name: seq.numpy(),
+    }
+
+    onnx_output = torch.from_numpy(
+        onnx_session.run(
+            None,
+            onnx_inputs,
+        )[0]
+    )
+
+    onnx_diff = float((reference_output - onnx_output).abs().max().item())
+
+    if onnx_diff > PARITY_TOLERANCE:
+        raise RuntimeError(
+            "FT-CAT ONNX parity failed: " f"max diff {onnx_diff:.2e} > " f"{PARITY_TOLERANCE:.2e}"
+        )
+
+    logger.info(
+        "FT-CAT parity verified: EXIR %.6e, ONNX %.6e",
+        exir_diff,
+        onnx_diff,
+    )
+
+    return {
+        "exir_max_diff": round(exir_diff, 8),
+        "onnx_max_diff": round(onnx_diff, 8),
+    }
+
+
+def export_hybrid_gate(
+    input_dir: str | Path,
+    output_dir: str | Path,
+) -> dict[str, float]:
+    """Export the trained learned hybrid gate to EXIR and ONNX.
 
     Args:
-        input_dir: Directory scanned for the trained checkpoint.
+        input_dir: Directory containing ``hybrid_gating.pt``.
         output_dir: Destination directory for serialized artifacts.
-        config: Loaded configuration dict.
 
     Returns:
-        Dict of artifact name to measured parity error.
+        Dictionary containing EXIR and ONNX parity errors.
+
+    Raises:
+        FileNotFoundError: If the trained gate checkpoint does not exist.
     """
     input_path = Path(input_dir)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    checkpoint_path = input_path / "hybrid_gating.pt"
+    gate, _ = load_hybrid_gate_checkpoint(checkpoint_path)
+    gate.eval()
+
+    export_gate = HybridGateExportModule(gate)
+    export_gate.eval()
+
+    sample = torch.randn(4, gate.input_dim)
+
+    exir_path = output_path / "hybrid_gating.pt2"
+    onnx_path = output_path / "hybrid_gating.onnx"
+
+    export_exir(export_gate, exir_path, sample)
+
+    export_onnx(
+        export_gate,
+        onnx_path,
+        sample,
+        input_name="gate_features",
+        output_name="fraud_probability",
+    )
+
+    exir_module = load_exir(exir_path)
+    exir_diff = verify_parity(gate, exir_module, sample)
+
+    onnx_session = onnxruntime.InferenceSession(
+        str(onnx_path),
+        providers=["CPUExecutionProvider"],
+    )
+
+    input_name = onnx_session.get_inputs()[0].name
+    onnx_output = onnx_session.run(
+        None,
+        {input_name: sample.numpy()},
+    )[0]
+
+    onnx_diff = verify_parity(
+        gate,
+        torch.from_numpy(onnx_output),
+        sample,
+    )
+
+    return {
+        "exir_max_diff": round(exir_diff, 8),
+        "onnx_max_diff": round(onnx_diff, 8),
+    }
+
+
+def export_all(
+    input_dir: str | Path,
+    output_dir: str | Path,
+    config: dict,
+) -> dict[str, float]:
+    """Export available trained models to EXIR and ONNX with parity checks.
+
+    The autoencoder keeps its reference-model fallback for development and
+    tests. FT-CAT and learned-gate artifacts are exported when their trained
+    checkpoints are present in the input directory.
+
+    Args:
+        input_dir: Directory containing trained model checkpoints.
+        output_dir: Destination directory for serialized artifacts.
+        config: Loaded project configuration.
+
+    Returns:
+        Dictionary containing parity errors for all exported models.
+    """
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
     model, _ = _resolve_model(input_path, config)
+
     l1_gamma = float(config.get("autoencoder", {}).get("anomaly_score", {}).get("l1_gamma", 0.4))
+
     scorer = ScoreModule(model, l1_gamma=l1_gamma)
     input_dim = int(config["autoencoder"]["input_dim"])
     sample = torch.randn(4, input_dim)
+
     exir_path = output_path / "autoencoder.pt2"
     onnx_path = output_path / "autoencoder.onnx"
+
     export_exir(scorer, exir_path, sample)
     export_onnx(scorer, onnx_path, sample)
+
     exir_module = load_exir(exir_path)
     exir_diff = verify_parity(scorer, exir_module, sample)
-    onnx_session = onnxruntime.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
-    input_name = onnx_session.get_inputs()[0].name
-    onnx_out = torch.from_numpy(onnx_session.run(None, {input_name: sample.numpy()})[0]).reshape(
-        -1, 1
+
+    onnx_session = onnxruntime.InferenceSession(
+        str(onnx_path),
+        providers=["CPUExecutionProvider"],
     )
-    onnx_diff = verify_parity(scorer, onnx_out, sample)
-    return {"exir_max_diff": round(exir_diff, 8), "onnx_max_diff": round(onnx_diff, 8)}
+    input_name = onnx_session.get_inputs()[0].name
+    onnx_out = torch.from_numpy(
+        onnx_session.run(
+            None,
+            {input_name: sample.numpy()},
+        )[0]
+    ).reshape(-1, 1)
+
+    onnx_diff = verify_parity(
+        scorer,
+        onnx_out,
+        sample,
+    )
+
+    report = {
+        "exir_max_diff": round(exir_diff, 8),
+        "onnx_max_diff": round(onnx_diff, 8),
+    }
+
+    ft_checkpoint = input_path / "ft_transformer.pt"
+
+    if ft_checkpoint.is_file():
+        logger.info("Exporting trained FT-CAT checkpoint %s", ft_checkpoint)
+
+        ft_report = export_ft_transformer(
+            input_path,
+            output_path,
+        )
+
+        report["ft_transformer_exir_max_diff"] = ft_report["exir_max_diff"]
+        report["ft_transformer_onnx_max_diff"] = ft_report["onnx_max_diff"]
+    else:
+        logger.info(
+            "FT-CAT checkpoint %s not found; skipping FT-CAT export",
+            ft_checkpoint,
+        )
+
+    gate_checkpoint = input_path / "hybrid_gating.pt"
+
+    if gate_checkpoint.is_file():
+        logger.info(
+            "Exporting trained hybrid gate checkpoint %s",
+            gate_checkpoint,
+        )
+
+        gate_report = export_hybrid_gate(
+            input_path,
+            output_path,
+        )
+
+        report["hybrid_gating_exir_max_diff"] = gate_report["exir_max_diff"]
+        report["hybrid_gating_onnx_max_diff"] = gate_report["onnx_max_diff"]
+    else:
+        logger.info(
+            "Hybrid gate checkpoint %s not found; skipping gate export",
+            gate_checkpoint,
+        )
+
+    return report
 
 
 def main(argv: list[str] | None = None) -> None:
