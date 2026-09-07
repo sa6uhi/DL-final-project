@@ -56,8 +56,6 @@ GATE_DISAGREEMENT_FIGURE: Final[Path] = FIGURES_DIR / "hybrid_gating" / "gate_di
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
-
-
 class NavigationItem(NamedTuple):
     """One sidebar navigation item."""
 
@@ -80,8 +78,6 @@ NAV_ITEMS: Final[tuple[NavigationItem, ...]] = (
 # ---------------------------------------------------------------------------
 # Artifact helpers
 # ---------------------------------------------------------------------------
-
-
 def artifact_exists(path: Path) -> bool:
     """Return whether a model or experiment artifact exists."""
     return path.is_file()
@@ -163,8 +159,6 @@ def safe_metric(
 # ---------------------------------------------------------------------------
 # Styling
 # ---------------------------------------------------------------------------
-
-
 def inject_styles() -> None:
     """Inject command-center-inspired dark green styling."""
     st.markdown(
@@ -533,8 +527,6 @@ def inject_styles() -> None:
 # ---------------------------------------------------------------------------
 # Reusable components
 # ---------------------------------------------------------------------------
-
-
 def render_header(
     title: str,
     subtitle: str,
@@ -647,8 +639,6 @@ def render_artifact_image(
 # ---------------------------------------------------------------------------
 # Command page
 # ---------------------------------------------------------------------------
-
-
 def command_page() -> None:
     """Render the main fraud-command overview."""
     render_header(
@@ -867,8 +857,6 @@ def command_page() -> None:
 # ---------------------------------------------------------------------------
 # Prediction
 # ---------------------------------------------------------------------------
-
-
 def prediction_page() -> None:
     """Render single-transaction workflow explanation."""
     render_header(
@@ -939,8 +927,6 @@ def prediction_page() -> None:
 # ---------------------------------------------------------------------------
 # Batch analysis
 # ---------------------------------------------------------------------------
-
-
 def batch_analysis_page() -> None:
     """Render result-file batch inspection."""
     render_header(
@@ -1004,8 +990,6 @@ def batch_analysis_page() -> None:
 # ---------------------------------------------------------------------------
 # Model insights
 # ---------------------------------------------------------------------------
-
-
 def model_insights_page() -> None:
     """Render model diagnostics."""
     render_header(
@@ -1078,8 +1062,6 @@ def model_insights_page() -> None:
 # ---------------------------------------------------------------------------
 # Conformal triage
 # ---------------------------------------------------------------------------
-
-
 def conformal_page() -> None:
     """Render conformal evaluation."""
     render_header(
@@ -1163,8 +1145,6 @@ def conformal_page() -> None:
 # ---------------------------------------------------------------------------
 # Explainability
 # ---------------------------------------------------------------------------
-
-
 def explainability_page() -> None:
     """Render DAE-component SHAP artifacts."""
     render_header(
@@ -1252,8 +1232,6 @@ def explainability_page() -> None:
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
-
-
 def settings_page() -> None:
     """Render project artifact status."""
     render_header(
@@ -1315,8 +1293,6 @@ def settings_page() -> None:
 # ---------------------------------------------------------------------------
 # About
 # ---------------------------------------------------------------------------
-
-
 def about_page() -> None:
     """Render technical architecture information."""
     render_header(
@@ -1369,8 +1345,6 @@ def about_page() -> None:
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
-
-
 def render_sidebar() -> str:
     """Render command-center navigation."""
     ready = readiness_count()
@@ -1418,8 +1392,6 @@ def render_sidebar() -> str:
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-
-
 def main() -> None:
     """Run Streamlit dashboard."""
     st.set_page_config(
