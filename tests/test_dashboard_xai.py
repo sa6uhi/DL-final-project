@@ -307,10 +307,15 @@ def test_explainability_sampling_consistency_renders_real_metrics(
 
     values = {metric.label: metric.value for metric in app.metric}
 
-    assert values["Mean Spearman"] == "0.892"
-    assert values["Min Spearman"] == "0.888"
-    assert values["Mean Top-K Jaccard"] == "0.476"
-    assert values["Min Top-K Jaccard"] == "0.429"
+    repo_root = Path(__file__).resolve().parent.parent
+    real_summary = json.loads(
+        (repo_root / "results" / "explainability" / "dae_shap_consistency.json").read_text()
+    )["summary"]
+
+    assert values["Mean Spearman"] == f"{real_summary['mean_spearman_correlation']:.3f}"
+    assert values["Min Spearman"] == f"{real_summary['min_spearman_correlation']:.3f}"
+    assert values["Mean Top-K Jaccard"] == f"{real_summary['mean_top_k_jaccard']:.3f}"
+    assert values["Min Top-K Jaccard"] == f"{real_summary['min_top_k_jaccard']:.3f}"
 
 
 def test_shap_component_contract_identifies_dae_only() -> None:
