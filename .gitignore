@@ -19,8 +19,12 @@ venv/
 /logs/
 /models/checkpoints/*
 !/models/checkpoints/autoencoder.*
+!/models/checkpoints/ft_transformer.*
+!/models/checkpoints/hybrid_gating.*
 /models/artifacts/*
 !/models/artifacts/autoencoder.*
+!/models/artifacts/ft_transformer.*
+!/models/artifacts/hybrid_gating.*
 *.pkl
 
 # IDE
