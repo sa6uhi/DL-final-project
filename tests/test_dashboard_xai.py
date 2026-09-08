@@ -17,7 +17,7 @@ from src.dashboard.app import (
     status_label,
 )
 
-APP_PATH = Path("src/dashboard/app.py")
+APP_PATH = (Path(__file__).resolve().parent.parent / "src" / "dashboard" / "app.py").resolve()
 
 
 # ---------------------------------------------------------------------------
