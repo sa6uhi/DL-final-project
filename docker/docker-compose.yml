@@ -37,3 +37,21 @@ services:
       - ../models:/app/models
       - ../logs:/app/logs
     command: ["run_all.sh"]
+
+  dashboard:
+    profiles: ["dashboard"]
+    image: ghcr.io/sa6uhi/dl-final-project-dashboard:v1.0-final
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.train
+    ports:
+      - "8501:8501"
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+    volumes:
+      - ../models:/app/models:ro
+      - ../figures:/app/figures:ro
+      - ../results:/app/results:ro
+      - ../logs:/app/logs
+    command: ["streamlit", "run", "src/dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    restart: unless-stopped

@@ -1,26 +1,40 @@
-# Training image: full training stack (CPU-only PyTorch), no inference concerns.
+# Training image: full training stack (CPU-only PyTorch).
 
-FROM python:3.14-slim
+FROM python:3.14-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive
 
+WORKDIR /build
+
+COPY requirements.txt ./
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip --quiet \
+    && /opt/venv/bin/pip install --quiet -r requirements.txt
+
+FROM python:3.14-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH"
+
 WORKDIR /app
 
-# Dependencies first so code edits reuse the install layer.
-COPY requirements.txt ./
-RUN pip install --upgrade pip --quiet \
-    && pip install --quiet -r requirements.txt
+RUN useradd --system --uid 10001 --create-home appuser \
+    && mkdir -p /app/data /app/models /app/logs \
+    && chown -R appuser:appuser /app
 
-COPY config/ ./config/
-COPY src/ ./src/
-COPY tests/ ./tests/
-COPY run_all.sh ./
-RUN chmod +x run_all.sh && useradd --system --uid 10001 --create-home appuser
+COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
+COPY --chown=appuser:appuser config/ ./config/
+COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser tests/ ./tests/
+COPY --chown=appuser:appuser run_all.sh ./
+RUN chmod +x run_all.sh
 
 USER appuser
-VOLUME ["/app/models", "/app/logs"]
-ENTRYPOINT ["/bin/bash"]
-CMD ["run_all.sh"]
+
+VOLUME ["/app/data", "/app/models", "/app/logs"]
+
+CMD ["./run_all.sh"]

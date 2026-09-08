@@ -17,12 +17,13 @@ from torch import nn
 
 
 class DenoisingAutoencoder(nn.Module):
-    """Deep denoising autoencoder with composite MSE + BCE reconstruction loss.
+    """Deep denoising autoencoder with MSE reconstruction loss.
 
     The model applies optional deterministic input corruption (Gaussian noise
-    plus random feature dropout) before encoding, learns a 32D bottleneck
+    plus random feature dropout) during training, learns a 32D bottleneck
     manifold, and scores anomalies via per-sample reconstruction residuals
-    ``S(x) = ||x - x_bar||_2^2 + gamma * ||x - x_bar||_1``.
+    ``S(x) = ||x - x_bar||_2^2 + gamma * ||x - x_bar||_1``. BCE loss is ablated
+    to 0 by default for unbounded RobustScaled features.
     """
 
     def __init__(
@@ -109,6 +110,8 @@ class DenoisingAutoencoder(nn.Module):
         Returns:
             Corrupted input of the same shape as ``x``.
         """
+        if not self.training:
+            return x
         x = x + torch.randn_like(x) * self.noise_std
         mask = torch.rand_like(x) > self.feature_dropout_prob
         return x * mask.float()
@@ -185,6 +188,10 @@ class DenoisingAutoencoder(nn.Module):
             raise ValueError(f"l1_gamma must be non-negative, got {l1_gamma}")
         if reduction not in {"none", "mean", "sum"}:
             raise ValueError(f"Unsupported reduction: {reduction!r}")
+        if x.size(0) == 0:
+            raise ValueError("Input tensor x must not be empty")
+        if not torch.isfinite(x).all():
+            raise ValueError("Input tensor x contains non-finite values")
         was_training = self.training
         self.eval()
         try:
@@ -194,7 +201,12 @@ class DenoisingAutoencoder(nn.Module):
             if was_training:
                 self.train()
         residual = x - x_hat
-        scores = (residual.pow(2)).sum(dim=-1) + l1_gamma * residual.abs().sum(dim=-1)
+        sq_term = residual.pow(2).to(torch.float64).sum(dim=-1).to(torch.float32)
+        if l1_gamma > 0.0:
+            l1_term = residual.abs().to(torch.float64).sum(dim=-1).to(torch.float32)
+            scores = sq_term + l1_gamma * l1_term
+        else:
+            scores = sq_term
         if reduction == "mean":
             return scores.mean()
         if reduction == "sum":
@@ -205,26 +217,34 @@ class DenoisingAutoencoder(nn.Module):
     def loss(
         x: torch.Tensor,
         x_hat: torch.Tensor,
-        mse_weight: float = 0.5,
-        bce_weight: float = 0.5,
+        mse_weight: float = 1.0,
+        bce_weight: float = 0.0,
     ) -> torch.Tensor:
-        """Composite reconstruction loss: weighted MSE plus BCE.
+        """Reconstruction loss: weighted MSE with optional BCE term.
 
         Args:
             x: Ground-truth input of shape ``(batch, input_dim)``.
             x_hat: Reconstruction of shape ``(batch, input_dim)``.
-            mse_weight: Weight assigned to the MSE term.
-            bce_weight: Weight assigned to the BCE term.
+            mse_weight: Weight assigned to the MSE term (defaults to 1.0).
+            bce_weight: Weight assigned to the BCE term (defaults to 0.0).
 
         Returns:
             Scalar composite loss tensor.
 
         Raises:
-            ValueError: If the tensors are not shape-compatible.
+            ValueError: If the tensors are not shape-compatible or contain non-finite values.
         """
         if x.shape != x_hat.shape:
             raise ValueError(f"Shape mismatch: x {tuple(x.shape)} vs x_hat {tuple(x_hat.shape)}")
+        if not (torch.isfinite(x).all() and torch.isfinite(x_hat).all()):
+            raise ValueError("Non-finite values encountered in loss computation")
         mse_term = nn.functional.mse_loss(x_hat, x)
+        if bce_weight == 0.0:
+            return mse_weight * mse_term
+        if mse_weight == 0.0:
+            return bce_weight * nn.functional.binary_cross_entropy_with_logits(
+                x_hat, x.clamp(0.0, 1.0)
+            )
         bce_term = nn.functional.binary_cross_entropy_with_logits(x_hat, x.clamp(0.0, 1.0))
         return mse_weight * mse_term + bce_weight * bce_term
 
@@ -233,7 +253,7 @@ class DenoisingAutoencoder(nn.Module):
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 nn.init.kaiming_normal_(
-                    module.weight, a=math.sqrt(5), mode="fan_in", nonlinearity="leaky_relu"
+                    module.weight, a=self.activation_slope, mode="fan_in", nonlinearity="leaky_relu"
                 )
                 if module.bias is not None:
                     fan_in = module.weight.size(1)

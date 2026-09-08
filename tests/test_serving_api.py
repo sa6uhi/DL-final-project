@@ -527,3 +527,10 @@ def test_build_scorer_uses_calibrated_const(
     monkeypatch.setattr(config.serving, "model_path", str(ckpt))
     scorer = build_scorer(config)
     assert scorer.anomaly_const == 33.3
+
+
+def test_predict_rejects_extra_fields(client: TestClient, features: list[float]) -> None:
+    """Extra or misspelled payload fields are rejected with 422."""
+    payload = {"features": features, "ft_probabilty": 0.5}  # deliberate typo
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 422

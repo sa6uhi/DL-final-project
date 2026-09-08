@@ -33,8 +33,8 @@ COPY --chown=appuser:appuser config/ ./config/
 COPY --chown=appuser:appuser src/ ./src/
 COPY --chown=appuser:appuser docker/entrypoint-infer.sh ./entrypoint-infer.sh
 RUN chmod +x ./entrypoint-infer.sh
+COPY --chown=appuser:appuser models/ ./models/
 
-# Models are role-mounted on top of /app/models at deploy time.
 USER appuser
 
 EXPOSE 8000

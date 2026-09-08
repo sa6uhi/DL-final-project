@@ -131,11 +131,15 @@ def test_anomaly_score_eval_mode_does_not_toggle_training(ae: DenoisingAutoencod
 
 
 def test_corrupt_keeps_shape_and_adjusts_values(ae: DenoisingAutoencoder) -> None:
-    """Corruption preserves shape but modifies values."""
-    x = torch.zeros(8, ae.input_dim)
-    corrupted = ae.corrupt(x)
-    assert tuple(corrupted.shape) == tuple(x.shape)
-    assert not torch.equal(corrupted, x)
+    """Corruption preserves shape but modifies values in training mode."""
+    ae.train()
+    try:
+        x = torch.zeros(8, ae.input_dim)
+        corrupted = ae.corrupt(x)
+        assert tuple(corrupted.shape) == tuple(x.shape)
+        assert not torch.equal(corrupted, x)
+    finally:
+        ae.eval()
 
 
 def test_corrupt_has_noiseless_reconstruction_in_eval(ae: DenoisingAutoencoder) -> None:
@@ -186,21 +190,45 @@ def test_anomaly_score_bad_reduction_raises(
 
 
 def test_loss_value_and_shapes(ae: DenoisingAutoencoder) -> None:
-    """Loss is a positive scalar matching the weighted composite formula."""
+    """Loss is a positive scalar matching MSE by default and weighted composite when configured."""
     x = torch.rand(8, ae.input_dim)
     x_hat = torch.rand(8, ae.input_dim)
-    loss = ae.loss(x, x_hat)
-    assert loss.item() > 0
-    mse = torch.nn.functional.mse_loss(x_hat, x)
+    # Default is pure MSE (1.0, 0.0)
+    loss_default = ae.loss(x, x_hat)
+    assert loss_default.item() > 0
+    expected_mse = torch.nn.functional.mse_loss(x_hat, x)
+    assert torch.isclose(loss_default, expected_mse)
+
+    # Explicit composite weighting (0.5, 0.5)
+    loss_composite = ae.loss(x, x_hat, mse_weight=0.5, bce_weight=0.5)
     bce = torch.nn.functional.binary_cross_entropy_with_logits(x_hat, x.clamp(0, 1))
-    expected = 0.5 * mse + 0.5 * bce
-    assert torch.isclose(loss, expected)
+    expected_comp = 0.5 * expected_mse + 0.5 * bce
+    assert torch.isclose(loss_composite, expected_comp)
 
 
 def test_loss_shape_mismatch_raises(ae: DenoisingAutoencoder) -> None:
     """Mismatched tensors raise ValueError."""
     with pytest.raises(ValueError):
         ae.loss(torch.rand(2, 3), torch.rand(2, 4))
+
+
+def test_loss_non_finite_raises(ae: DenoisingAutoencoder) -> None:
+    """Non-finite values raise ValueError in loss."""
+    x = torch.tensor([[float("nan"), 1.0]])
+    x_hat = torch.tensor([[0.0, 1.0]])
+    with pytest.raises(ValueError, match="Non-finite values"):
+        ae.loss(x, x_hat)
+
+
+def test_anomaly_score_empty_or_non_finite_raises(ae: DenoisingAutoencoder) -> None:
+    """Empty or non-finite inputs to anomaly_score raise ValueError."""
+    with pytest.raises(ValueError, match="must not be empty"):
+        ae.anomaly_score(torch.empty(0, ae.input_dim))
+
+    nan_tensor = torch.ones(2, ae.input_dim)
+    nan_tensor[0, 0] = float("nan")
+    with pytest.raises(ValueError, match="contains non-finite"):
+        ae.anomaly_score(nan_tensor)
 
 
 def test_invalid_architecture_raises() -> None:
