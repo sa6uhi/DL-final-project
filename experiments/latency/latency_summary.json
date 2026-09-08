@@ -1,0 +1,134 @@
+[
+  {
+    "backend": "pytorch_dae",
+    "batch_size": 1,
+    "n_runs": 200,
+    "p50_ms": 0.382,
+    "p90_ms": 0.404,
+    "p95_ms": 0.414,
+    "p99_ms": 0.71,
+    "mean_ms": 0.39,
+    "throughput_req_s": 2566.8
+  },
+  {
+    "backend": "pytorch_dae",
+    "batch_size": 8,
+    "n_runs": 200,
+    "p50_ms": 0.322,
+    "p90_ms": 0.334,
+    "p95_ms": 0.344,
+    "p99_ms": 0.365,
+    "mean_ms": 0.325,
+    "throughput_req_s": 24621.9
+  },
+  {
+    "backend": "pytorch_dae",
+    "batch_size": 32,
+    "n_runs": 200,
+    "p50_ms": 0.55,
+    "p90_ms": 0.564,
+    "p95_ms": 0.582,
+    "p99_ms": 0.619,
+    "mean_ms": 0.554,
+    "throughput_req_s": 57753.2
+  },
+  {
+    "backend": "pytorch_dae",
+    "batch_size": 64,
+    "n_runs": 200,
+    "p50_ms": 0.781,
+    "p90_ms": 0.812,
+    "p95_ms": 0.838,
+    "p99_ms": 0.86,
+    "mean_ms": 0.788,
+    "throughput_req_s": 81243.7
+  },
+  {
+    "backend": "exir",
+    "batch_size": 1,
+    "n_runs": 200,
+    "p50_ms": 0.76,
+    "p90_ms": 0.904,
+    "p95_ms": 0.919,
+    "p99_ms": 0.987,
+    "mean_ms": 0.668,
+    "throughput_req_s": 1496.4
+  },
+  {
+    "backend": "exir",
+    "batch_size": 8,
+    "n_runs": 200,
+    "p50_ms": 0.322,
+    "p90_ms": 0.348,
+    "p95_ms": 0.366,
+    "p99_ms": 0.447,
+    "mean_ms": 0.33,
+    "throughput_req_s": 24239.8
+  },
+  {
+    "backend": "exir",
+    "batch_size": 32,
+    "n_runs": 200,
+    "p50_ms": 0.472,
+    "p90_ms": 0.505,
+    "p95_ms": 0.526,
+    "p99_ms": 0.641,
+    "mean_ms": 0.482,
+    "throughput_req_s": 66384.1
+  },
+  {
+    "backend": "exir",
+    "batch_size": 64,
+    "n_runs": 200,
+    "p50_ms": 0.671,
+    "p90_ms": 0.708,
+    "p95_ms": 0.745,
+    "p99_ms": 0.837,
+    "mean_ms": 0.681,
+    "throughput_req_s": 93914.9
+  },
+  {
+    "backend": "onnx",
+    "batch_size": 1,
+    "n_runs": 200,
+    "p50_ms": 0.064,
+    "p90_ms": 0.071,
+    "p95_ms": 0.076,
+    "p99_ms": 0.137,
+    "mean_ms": 0.067,
+    "throughput_req_s": 14861.6
+  },
+  {
+    "backend": "onnx",
+    "batch_size": 8,
+    "n_runs": 200,
+    "p50_ms": 0.087,
+    "p90_ms": 0.096,
+    "p95_ms": 0.099,
+    "p99_ms": 0.105,
+    "mean_ms": 0.088,
+    "throughput_req_s": 91084.5
+  },
+  {
+    "backend": "onnx",
+    "batch_size": 32,
+    "n_runs": 200,
+    "p50_ms": 0.255,
+    "p90_ms": 0.267,
+    "p95_ms": 0.283,
+    "p99_ms": 0.305,
+    "mean_ms": 0.258,
+    "throughput_req_s": 124007.9
+  },
+  {
+    "backend": "onnx",
+    "batch_size": 64,
+    "n_runs": 200,
+    "p50_ms": 0.405,
+    "p90_ms": 0.469,
+    "p95_ms": 0.526,
+    "p99_ms": 0.634,
+    "mean_ms": 0.425,
+    "throughput_req_s": 150526.2
+  }
+]
