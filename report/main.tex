@@ -282,6 +282,31 @@ The trained DAE, FT-CAT, and learned gate can be exported to PyTorch EXIR and
 ONNX. Export routines validate numerical parity against PyTorch inference.
 \section{Results}
 \label{sec:results}
+\subsection{Classical Baselines}
+Logistic regression, random forest, and LightGBM baselines were trained on
+the upstream-model training split and evaluated on the chronological
+development-validation split (88{,}581 transactions).
+Table~\ref{tab:baselines} reports validation PR-AUC and ROC-AUC.
+\begin{table}[t]
+\caption{Classical baselines on the chronological development-validation set.}
+\label{tab:baselines}
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Model & PR-AUC & ROC-AUC \\
+\midrule
+Logistic Regression (balanced) & 0.4354 & 0.8534 \\
+Random Forest (200 trees, depth 16) & 0.4542 & 0.8743 \\
+LightGBM (weighted) & 0.5089 & 0.8991 \\
+\bottomrule
+\end{tabular}
+\end{table}
+The random forest uses a maximum depth of 16 and a minimum leaf size of 10:
+without a depth limit, 200 fully grown trees on the full training data
+produced a 550\,MB checkpoint with multi-second inference stalls, while the
+constrained model compresses to 56\,MB and scores the full validation split
+in 0.3\,s on CPU. Final out-of-time test comparison against the deep models
+is reported with the Exp-1 evaluation.
 \subsection{FT-CAT Performance}
 Table~\ref{tab:ftcat} reports final FT-CAT performance on the chronological
 held-out test set.
