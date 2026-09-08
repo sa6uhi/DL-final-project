@@ -17,11 +17,10 @@ venv/
 /data/
 /figures/
 /logs/
-/models/checkpoints/
-/models/artifacts/
-*.pt
-*.pt2
-*.onnx
+/models/checkpoints/*
+!/models/checkpoints/autoencoder.*
+/models/artifacts/*
+!/models/artifacts/autoencoder.*
 *.pkl
 
 # IDE
