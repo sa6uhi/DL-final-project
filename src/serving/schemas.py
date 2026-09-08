@@ -53,7 +53,7 @@ class PredictionRequest(BaseModel):
             amount across available prior rows.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     features: list[float] = Field(..., min_length=N_FEATURES_MIN, max_length=N_FEATURES_MAX)
     transaction_id: Optional[str] = Field(default=None, max_length=64)
@@ -76,7 +76,7 @@ class StreamRequest(BaseModel):
         transactions: Payload list, capped at ``MAX_BATCH_SIZE`` entries.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     transactions: list[PredictionRequest] = Field(..., min_length=1, max_length=MAX_BATCH_SIZE)
 
@@ -187,7 +187,7 @@ class ExplainRequest(BaseModel):
         ft_probability: Optional FT-Transformer probability for fused attribution.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     features: list[float] = Field(..., min_length=N_FEATURES_MIN, max_length=N_FEATURES_MAX)
     transaction_id: Optional[str] = Field(default=None, max_length=64)
