@@ -458,6 +458,11 @@ beyond 128 produced no additional throughput benefit in the tested CPU
 environment.
 These measurements describe model-side neural inference and should not be
 interpreted as complete HTTP API latency.
+At the component level, the servable DAE scorer was benchmarked separately
+with 200 timed iterations per cell on CPU across batch sizes 1--64. At batch
+size 1, P99 latency was 0.71~ms for PyTorch eager execution, 0.99~ms for the
+EXIR export, and 0.14~ms for ONNX, all well within the 15~ms service
+objective; DAE-scorer P99 remained below 1~ms at every tested batch size.
 \begin{figure}[t]
 \centering
 \includegraphics[
@@ -468,9 +473,14 @@ interpreted as complete HTTP API latency.
 \label{fig:throughput}
 \end{figure}
 \subsection{Deployment and Serialization}
-The trained DAE, FT-CAT, and learned gate were successfully serialized to both
-PyTorch EXIR and ONNX representations. Export-time parity checks compare
-serialized outputs with their PyTorch reference implementations.
+The trained DAE (485{,}440 parameters, 1.95\,MB checkpoint) was serialized to
+both PyTorch EXIR (2.00\,MB) and ONNX (1.96\,MB) representations. Export-time
+parity checks compare serialized outputs with their PyTorch reference
+implementations. The FT-CAT and learned-gate checkpoints follow the same
+export pipeline once their training lands.
+The containerized FastAPI scoring service (single CPU worker, DAE-only
+scoring) holds a steady-state resident footprint of approximately 310\,MiB
+inside a 1.91\,GB uncompressed inference image.
 The product additionally exposes a FastAPI scoring interface and a Streamlit
 analyst dashboard. The dashboard surfaces prediction, batch analysis, model
 insights, conformal triage, explainability, and artifact-readiness information.
