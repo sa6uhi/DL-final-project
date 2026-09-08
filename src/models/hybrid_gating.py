@@ -19,6 +19,7 @@ import torch
 from torch import nn
 
 from src.utils.logger import get_logger
+from src.utils.tensor_validation import validate_tensor
 
 logger = get_logger(__name__)
 
@@ -235,14 +236,13 @@ class LearnedHybridGate(nn.Module):
         Raises:
             ValueError: If the input tensor has an invalid shape or non-finite values.
         """
-        if features.ndim != 2:
-            raise ValueError(f"features must be 2D, got shape {tuple(features.shape)}")
-
-        if features.shape[1] != self.input_dim:
-            raise ValueError(f"Expected {self.input_dim} input features, got {features.shape[1]}")
-
-        if not torch.isfinite(features).all():
-            raise ValueError("features must contain only finite values")
+        validate_tensor(
+            features,
+            name="features",
+            ndim=2,
+            feature_dim=self.input_dim,
+            require_finite=True,
+        )
 
         logits = self.network(features)
         return torch.sigmoid(logits).squeeze(-1)

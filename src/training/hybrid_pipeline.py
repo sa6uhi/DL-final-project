@@ -23,6 +23,10 @@ from src.training.train_hybrid_gating import (
 from src.uncertainty.conformal_predictor import SplitConformalPredictor
 from src.utils.config import Config
 from src.utils.logger import get_logger
+from src.utils.tensor_validation import (
+    validate_probability_tensor,
+    validate_tensor,
+)
 
 logger = get_logger(__name__)
 
@@ -148,14 +152,13 @@ def transformer_probabilities(
     if not isinstance(logits, torch.Tensor):
         raise TypeError("Transformer output must contain a tensor of logits")
 
-    if logits.ndim != 1:
-        raise ValueError("Transformer logits must be one-dimensional")
-
-    if logits.numel() == 0:
-        raise ValueError("Transformer logits must not be empty")
-
-    if not torch.isfinite(logits).all():
-        raise ValueError("Transformer logits must contain only finite values")
+    validate_tensor(
+        logits,
+        name="Transformer logits",
+        ndim=1,
+        allow_empty=False,
+        require_finite=True,
+    )
 
     return torch.sigmoid(logits)
 
@@ -193,14 +196,13 @@ def autoencoder_anomaly_scores(
     if not isinstance(scores, torch.Tensor):
         raise TypeError("Autoencoder anomaly_score must return a tensor")
 
-    if scores.ndim != 1:
-        raise ValueError("Autoencoder anomaly scores must be one-dimensional")
-
-    if scores.numel() == 0:
-        raise ValueError("Autoencoder anomaly scores must not be empty")
-
-    if not torch.isfinite(scores).all():
-        raise ValueError("Autoencoder anomaly scores must contain only finite values")
+    validate_tensor(
+        scores,
+        name="Autoencoder anomaly scores",
+        ndim=1,
+        allow_empty=False,
+        require_finite=True,
+    )
 
     return scores
 
@@ -310,17 +312,12 @@ def learned_gate_probabilities(
 
     probabilities = probabilities.detach().cpu()
 
-    if probabilities.ndim != 1:
-        raise ValueError("Learned gate probabilities must be one-dimensional")
-
-    if probabilities.numel() == 0:
-        raise ValueError("Learned gate probabilities must not be empty")
-
-    if not torch.isfinite(probabilities).all():
-        raise ValueError("Learned gate probabilities must contain only finite values")
-
-    if ((probabilities < 0.0) | (probabilities > 1.0)).any():
-        raise ValueError("Learned gate probabilities must be in [0, 1]")
+    validate_probability_tensor(
+        probabilities,
+        name="Learned gate probabilities",
+        ndim=1,
+        allow_empty=False,
+    )
 
     return probabilities
 
