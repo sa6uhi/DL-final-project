@@ -45,7 +45,9 @@ def get_baselines(y_train: Any) -> Dict[str, Any]:
         ),
         "RandomForest_Balanced": RandomForestClassifier(
             n_estimators=200,
-            class_weight="balanced",
+            max_depth=16,
+            min_samples_leaf=10,
+            class_weight="balanced_subsample",
             n_jobs=-1,
             random_state=42,
             verbose=0,
