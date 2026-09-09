@@ -333,8 +333,7 @@ def _history_labels(seq_len: int) -> list[str]:
 
 
 def _save_figure(fig: "plt.Figure", output_path: str | Path, show_plot: bool) -> Path:
-    """Write a figure to disk, creating parent directories as needed.
-    """
+    """Write a figure to disk, creating parent directories as needed."""
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     # A figure that already owns a layout engine (constrained layout, used
