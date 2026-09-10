@@ -13,7 +13,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Decision = Literal["auto_approve", "auto_block", "escalate"]
+Decision = Literal["auto_approve", "auto_block", "human_review", "escalate"]
 
 N_FEATURES_MIN = 8
 N_FEATURES_MAX = 2500
@@ -61,6 +61,9 @@ class PredictionRequest(BaseModel):
     ft_probability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     history_density: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     history_amount_intensity: Optional[float] = Field(default=None, ge=0.0)
+    ft_continuous: Optional[list[float]] = None
+    ft_categorical: Optional[list[int]] = None
+    ft_sequence: Optional[list[list[float]]] = None
 
     @field_validator("features")
     @classmethod
@@ -104,6 +107,12 @@ class PredictionResponse(BaseModel):
     decision: Decision
     latency_ms: float = Field(..., ge=0.0)
     gate_used: bool = False
+    conformal_used: bool = False
+    conformal_set: Optional[list[int]] = None
+    conformal_alpha: Optional[float] = Field(default=None, gt=0.0, lt=1.0)
+    conformal_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    ft_probability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    ft_model_used: bool = False
 
 
 class StreamResponse(BaseModel):
@@ -140,6 +149,8 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     uptime_s: float = Field(..., ge=0.0)
     gate_loaded: bool = False
+    conformal_loaded: bool = False
+    ft_model_loaded: bool = False
 
 
 class MetricsResponse(BaseModel):

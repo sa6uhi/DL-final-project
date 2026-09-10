@@ -429,6 +429,57 @@ def export_conformal_results(
     return csv_path, json_path
 
 
+def export_serving_threshold(
+    results: list[dict[str, float]],
+    output_dir: str | Path,
+    serving_alpha: float,
+) -> Path:
+    """Export the calibrated conformal operating point used by serving."""
+    if not results:
+        raise ValueError("results must not be empty")
+
+    matches = [
+        result for result in results if np.isclose(float(result["alpha"]), float(serving_alpha))
+    ]
+
+    if len(matches) != 1:
+        raise ValueError(
+            "Expected exactly one conformal result for serving alpha "
+            f"{serving_alpha}, found {len(matches)}"
+        )
+
+    selected = matches[0]
+    threshold = float(selected["threshold"])
+
+    if not np.isfinite(threshold):
+        raise ValueError("Serving conformal threshold must be finite")
+
+    output_directory = Path(output_dir)
+    output_directory.mkdir(parents=True, exist_ok=True)
+
+    artifact = {
+        "method": "split_conformal",
+        "alpha": float(selected["alpha"]),
+        "threshold": threshold,
+    }
+
+    output_path = output_directory / "serving_threshold.json"
+
+    with output_path.open("w", encoding="utf-8") as output_file:
+        json.dump(
+            artifact,
+            output_file,
+            indent=2,
+        )
+
+    logger.info(
+        "Saved conformal serving threshold to %s",
+        output_path,
+    )
+
+    return output_path
+
+
 def get_git_commit() -> str | None:
     """Return the current Git commit hash when available."""
     try:
@@ -639,6 +690,14 @@ def main(argv: list[str] | None = None) -> None:
     export_conformal_results(
         results=results,
         output_dir=results_dir,
+    )
+
+    serving_alpha = float(config.nested_get("evaluation.conformal.alpha"))
+
+    export_serving_threshold(
+        results=results,
+        output_dir=results_dir,
+        serving_alpha=serving_alpha,
     )
 
     export_experiment_metadata(

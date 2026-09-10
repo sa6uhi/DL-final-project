@@ -10,6 +10,7 @@ caller-supplied FT-Transformer posterior (``ft_probability``).
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import time
@@ -34,8 +35,12 @@ from src.serving.schemas import (
     StreamResponse,
 )
 from src.models.hybrid_gating import LearnedHybridGate, PercentileNormalizer
+from src.uncertainty.conformal_predictor import prediction_set, triage_decision
 from src.training.train_autoencoder import _load_legit_features, load_checkpoint
 from src.training.train_hybrid_gating import load_checkpoint as load_gate_checkpoint
+from src.training.gate_velocity import extract_velocity_features
+from src.training.train_transformer import load_ft_transformer
+from src.training.feature_selection import UNK_INDEX
 from src.utils.config import Config, load_config
 from src.utils.logger import get_logger
 
@@ -110,6 +115,133 @@ def _load_gate(config: Config) -> tuple[LearnedHybridGate | None, PercentileNorm
     return gate, normalizer
 
 
+def _load_ft_model(
+    config: Config,
+) -> tuple[Any | None, dict[str, Any] | None]:
+    """Load the trained FT-CAT model and checkpoint payload when available."""
+    transformer_path = config.nested_get("serving.transformer_path", None)
+
+    if not transformer_path:
+        logger.warning("No serving transformer path configured; server-side FT-CAT disabled")
+        return None, None
+
+    model_path = Path(str(transformer_path))
+    require_ft_model = os.environ.get("SERVING_REQUIRE_FT_MODEL", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    if not model_path.is_file():
+        if require_ft_model:
+            raise FileNotFoundError(
+                f"SERVING_REQUIRE_FT_MODEL is enabled but checkpoint not found at {model_path}"
+            )
+        logger.warning(
+            "FT-CAT checkpoint %s missing; server-side FT-CAT disabled",
+            model_path,
+        )
+        return None, None
+
+    model, payload = load_ft_transformer(model_path, device="cpu")
+    model.eval()
+
+    logger.info("Loaded FT-CAT checkpoint from %s", model_path)
+
+    return model, payload
+
+
+def _load_conformal_threshold(
+    config: Config,
+) -> tuple[float | None, float | None]:
+    """Load the calibrated conformal operating point used by serving."""
+    artifact_path = Path(
+        config.nested_get(
+            "serving.conformal_path",
+            "results/conformal/serving_threshold.json",
+        )
+    )
+
+    if not artifact_path.is_file():
+        logger.warning(
+            "Conformal serving artifact %s missing; using legacy threshold triage",
+            artifact_path,
+        )
+        return None, None
+
+    try:
+        with artifact_path.open("r", encoding="utf-8") as artifact_file:
+            artifact = json.load(artifact_file)
+
+        method = artifact.get("method")
+        alpha = float(artifact["alpha"])
+        threshold = float(artifact["threshold"])
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "Unable to load conformal serving artifact %s; " "using legacy threshold triage: %s",
+            artifact_path,
+            exc,
+        )
+        return None, None
+
+    if method != "split_conformal":
+        logger.warning(
+            "Unsupported conformal method %r in %s; using legacy threshold triage",
+            method,
+            artifact_path,
+        )
+        return None, None
+
+    if not 0.0 < alpha < 1.0:
+        logger.warning(
+            "Invalid conformal alpha %.6f in %s; using legacy threshold triage",
+            alpha,
+            artifact_path,
+        )
+        return None, None
+
+    if not 0.0 <= threshold <= 1.0:
+        logger.warning(
+            "Invalid conformal threshold %.6f in %s; using legacy threshold triage",
+            threshold,
+            artifact_path,
+        )
+        return None, None
+
+    configured_alpha_value = config.nested_get("evaluation.conformal.alpha")
+
+    if configured_alpha_value is None:
+        logger.warning("Conformal alpha is not configured; using legacy threshold triage")
+        return None, None
+
+    try:
+        configured_alpha = float(configured_alpha_value)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Configured conformal alpha %r is invalid; using legacy threshold triage",
+            configured_alpha_value,
+        )
+        return None, None
+
+    if not math.isclose(alpha, configured_alpha, rel_tol=0.0, abs_tol=1e-12):
+        logger.warning(
+            "Conformal artifact alpha %.6f does not match configured alpha %.6f; "
+            "using legacy threshold triage",
+            alpha,
+            configured_alpha,
+        )
+        return None, None
+
+    logger.info(
+        "Loaded split-conformal serving threshold %.6f at alpha %.4f from %s",
+        threshold,
+        alpha,
+        artifact_path,
+    )
+
+    return alpha, threshold
+
+
 def build_scorer(config: Config) -> "Scorer":
     """Instantiate the scorer used by the application.
 
@@ -138,6 +270,8 @@ def build_scorer(config: Config) -> "Scorer":
         logger.warning("Checkpoint %s missing; using reference scoring model", model_path)
         loaded_serialized = False
     gate, normalizer = _load_gate(config)
+    ft_model, ft_payload = _load_ft_model(config)
+    conformal_alpha, conformal_threshold = _load_conformal_threshold(config)
     calibrated_const = getattr(model, "calibrated_const", None)
     if calibrated_const is not None:
         anomaly_const = float(calibrated_const)
@@ -188,6 +322,10 @@ def build_scorer(config: Config) -> "Scorer":
         gate=gate,
         normalizer=normalizer,
         shap_background=shap_background,
+        conformal_alpha=conformal_alpha,
+        conformal_threshold=conformal_threshold,
+        ft_model=ft_model,
+        ft_payload=ft_payload,
     )
 
 
@@ -225,6 +363,10 @@ class Scorer:
         gate: LearnedHybridGate | None = None,
         normalizer: PercentileNormalizer | None = None,
         shap_background: torch.Tensor | None = None,
+        conformal_alpha: float | None = None,
+        conformal_threshold: float | None = None,
+        ft_model: Any | None = None,
+        ft_payload: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the scorer."""
         self.model = model
@@ -239,9 +381,16 @@ class Scorer:
         self.gate = gate
         self.normalizer = normalizer
         self.shap_background = shap_background
+        self.conformal_alpha = conformal_alpha
+        self.conformal_threshold = conformal_threshold
+        self.ft_model = ft_model
+        self.ft_payload = ft_payload
 
         if gate is not None:
             gate.eval()
+
+        if self.ft_model is not None:
+            self.ft_model.eval()
 
     def _fuse(
         self,
@@ -322,12 +471,205 @@ class Scorer:
 
         return fused, True
 
+    def _predict_ft(
+        self,
+        ft_continuous: list[list[float]],
+        ft_categorical: list[list[int]],
+        ft_sequence: list[list[list[float]]],
+    ) -> np.ndarray:
+        """Run server-side FT-CAT inference for one or more transactions."""
+        if self.ft_model is None or self.ft_payload is None:
+            raise ValueError(
+                "Server-side FT-CAT inference requested but the FT-CAT model is not loaded"
+            )
+
+        meta = self.ft_payload.get("meta")
+
+        if not isinstance(meta, dict):
+            raise ValueError("FT-CAT checkpoint is missing model metadata")
+
+        n_continuous = int(meta["n_continuous"])
+        categorical_cardinalities = [int(value) for value in meta["categorical_cardinalities"]]
+        n_categorical = len(categorical_cardinalities)
+        seq_len = int(meta["seq_len"])
+        seq_dim = int(meta["seq_dim"])
+
+        continuous = np.asarray(ft_continuous, dtype=np.float32)
+        categorical = np.asarray(ft_categorical, dtype=np.int64)
+        sequence = np.asarray(ft_sequence, dtype=np.float32)
+
+        if continuous.ndim != 2 or continuous.shape[1] != n_continuous:
+            raise ValueError(
+                "ft_continuous must have shape "
+                f"(batch, {n_continuous}), got {tuple(continuous.shape)}"
+            )
+
+        if categorical.ndim != 2 or categorical.shape[1] != n_categorical:
+            raise ValueError(
+                "ft_categorical must have shape "
+                f"(batch, {n_categorical}), got {tuple(categorical.shape)}"
+            )
+
+        expected_sequence_shape = (
+            continuous.shape[0],
+            seq_len,
+            seq_dim,
+        )
+
+        if sequence.shape != expected_sequence_shape:
+            raise ValueError(
+                "ft_sequence must have shape "
+                f"{expected_sequence_shape}, got {tuple(sequence.shape)}"
+            )
+
+        if categorical.shape[0] != continuous.shape[0]:
+            raise ValueError("FT-CAT categorical inputs must match the continuous-input batch size")
+
+        if not np.isfinite(continuous).all():
+            raise ValueError("ft_continuous must contain only finite values")
+
+        if not np.isfinite(sequence).all():
+            raise ValueError("ft_sequence must contain only finite values")
+
+        for index, cardinality in enumerate(categorical_cardinalities):
+            codes = categorical[:, index]
+            out_of_range = (codes < 0) | (codes >= cardinality)
+
+            if np.any(out_of_range):
+                logger.warning(
+                    "ft_categorical feature %d holds %d codes outside [0, %d); clamping to <UNK>",
+                    index,
+                    int(np.sum(out_of_range)),
+                    cardinality,
+                )
+                codes[out_of_range] = UNK_INDEX
+                categorical[:, index] = codes
+
+        x_cont = torch.as_tensor(continuous, dtype=torch.float32)
+        x_cat = torch.as_tensor(categorical, dtype=torch.long)
+        seq = torch.as_tensor(sequence, dtype=torch.float32)
+
+        with torch.no_grad():
+            logits = self.ft_model(x_cont, x_cat, seq)
+            probabilities = torch.sigmoid(logits).cpu().numpy()
+
+        return np.asarray(probabilities, dtype=np.float32).reshape(-1)
+
+    def _resolve_ft_single(
+        self,
+        ft_probability: float | None,
+        history_density: float | None,
+        history_amount_intensity: float | None,
+        ft_continuous: list[float] | None,
+        ft_categorical: list[int] | None,
+        ft_sequence: list[list[float]] | None,
+    ) -> tuple[float | None, np.ndarray | None, bool]:
+        """Resolve legacy caller-supplied or server-side FT-CAT inputs."""
+        automatic_values = (
+            ft_continuous,
+            ft_categorical,
+            ft_sequence,
+        )
+        automatic_present = [value is not None for value in automatic_values]
+
+        if any(automatic_present) and not all(automatic_present):
+            raise ValueError(
+                "ft_continuous, ft_categorical, and ft_sequence " "must be provided together"
+            )
+
+        if all(automatic_present):
+            if ft_probability is not None:
+                raise ValueError(
+                    "ft_probability must not be provided when server-side "
+                    "FT-CAT inputs are supplied"
+                )
+
+            if history_density is not None or history_amount_intensity is not None:
+                raise ValueError(
+                    "Manual history features must not be provided when " "ft_sequence is supplied"
+                )
+
+            assert ft_continuous is not None
+            assert ft_categorical is not None
+            assert ft_sequence is not None
+
+            probability = float(
+                self._predict_ft(
+                    [ft_continuous],
+                    [ft_categorical],
+                    [ft_sequence],
+                )[0]
+            )
+
+            velocity = (
+                extract_velocity_features(
+                    [ft_sequence],
+                    transaction_amount_index=0,
+                )
+                .cpu()
+                .numpy()
+            )
+
+            return probability, velocity, True
+
+        velocity_features = None
+
+        if history_density is not None or history_amount_intensity is not None:
+            if history_density is None or history_amount_intensity is None:
+                raise ValueError(
+                    "history_density and history_amount_intensity " "must be provided together"
+                )
+
+            velocity_features = np.asarray(
+                [[history_density, history_amount_intensity]],
+                dtype=np.float32,
+            )
+
+        return ft_probability, velocity_features, False
+
+    def _triage(self, probability: float) -> dict[str, Any]:
+        """Apply conformal triage when calibrated, otherwise use legacy thresholds."""
+        if self.conformal_threshold is not None and self.conformal_alpha is not None:
+            conformal_prediction = prediction_set(
+                fraud_probability=probability,
+                threshold=self.conformal_threshold,
+            )
+            decision = triage_decision(conformal_prediction)
+
+            return {
+                "decision": decision,
+                "is_fraud": probability >= self.escalate_threshold,
+                "conformal_used": True,
+                "conformal_set": sorted(conformal_prediction),
+                "conformal_alpha": self.conformal_alpha,
+                "conformal_threshold": self.conformal_threshold,
+            }
+
+        decision, is_fraud = _decide(
+            probability,
+            self.approve_threshold,
+            self.block_threshold,
+            self.escalate_threshold,
+        )
+
+        return {
+            "decision": decision,
+            "is_fraud": is_fraud,
+            "conformal_used": False,
+            "conformal_set": None,
+            "conformal_alpha": None,
+            "conformal_threshold": None,
+        }
+
     def score(
         self,
         features: list[float],
         ft_probability: float | None = None,
         history_density: float | None = None,
         history_amount_intensity: float | None = None,
+        ft_continuous: list[float] | None = None,
+        ft_categorical: list[int] | None = None,
+        ft_sequence: list[list[float]] | None = None,
     ) -> dict[str, Any]:
         """Score a single transaction.
 
@@ -354,34 +696,30 @@ class Scorer:
         with torch.no_grad():
             score = self.model.anomaly_score(x, l1_gamma=self.l1_gamma).item()
 
-        velocity_features = None
-
-        if history_density is not None or history_amount_intensity is not None:
-            if history_density is None or history_amount_intensity is None:
-                raise ValueError(
-                    "history_density and history_amount_intensity " "must be provided together"
-                )
-
-            velocity_features = np.asarray(
-                [[history_density, history_amount_intensity]],
-                dtype=np.float32,
-            )
+        resolved_ft_probability, velocity_features, ft_model_used = self._resolve_ft_single(
+            ft_probability=ft_probability,
+            history_density=history_density,
+            history_amount_intensity=history_amount_intensity,
+            ft_continuous=ft_continuous,
+            ft_categorical=ft_categorical,
+            ft_sequence=ft_sequence,
+        )
 
         probabilities, gate_used = self._fuse(
             np.asarray([score]),
-            [ft_probability] if ft_probability is not None else None,
+            ([resolved_ft_probability] if resolved_ft_probability is not None else None),
             velocity_features,
         )
         probability = float(probabilities[0])
-        decision, is_fraud = _decide(
-            probability, self.approve_threshold, self.block_threshold, self.escalate_threshold
-        )
+        triage = self._triage(probability)
+
         return {
-            "is_fraud": is_fraud,
             "fraud_probability": probability,
             "anomaly_score": score,
-            "decision": decision,
             "gate_used": gate_used,
+            "ft_probability": resolved_ft_probability,
+            "ft_model_used": ft_model_used,
+            **triage,
         }
 
     def score_batch(
@@ -420,19 +758,14 @@ class Scorer:
         )
         results: list[dict[str, Any]] = []
         for score, probability in zip(scores, probabilities):
-            decision, is_fraud = _decide(
-                float(probability),
-                self.approve_threshold,
-                self.block_threshold,
-                self.escalate_threshold,
-            )
+            triage = self._triage(float(probability))
+
             results.append(
                 {
-                    "is_fraud": is_fraud,
                     "fraud_probability": float(probability),
                     "anomaly_score": float(score),
-                    "decision": decision,
                     "gate_used": gate_used,
+                    **triage,
                 }
             )
         return results
@@ -525,6 +858,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.requests_total = 0
     app.state.errors_total = 0
 
+    @app.post("/api/v1/predict", response_model=PredictionResponse)
     @app.post("/predict", response_model=PredictionResponse)
     def predict(request: PredictionRequest) -> PredictionResponse:
         """Score a single transaction end-to-end."""
@@ -535,6 +869,9 @@ def create_app(config: Config | None = None) -> FastAPI:
                 request.ft_probability,
                 request.history_density,
                 request.history_amount_intensity,
+                request.ft_continuous,
+                request.ft_categorical,
+                request.ft_sequence,
             )
         except ValueError as exc:
             app.state.errors_total += 1
@@ -550,29 +887,112 @@ def create_app(config: Config | None = None) -> FastAPI:
             decision=result["decision"],
             latency_ms=latency_ms,
             gate_used=result["gate_used"],
+            conformal_used=result["conformal_used"],
+            conformal_set=result["conformal_set"],
+            conformal_alpha=result["conformal_alpha"],
+            conformal_threshold=result["conformal_threshold"],
+            ft_probability=result["ft_probability"],
+            ft_model_used=result["ft_model_used"],
         )
 
+    @app.post("/api/v1/stream", response_model=StreamResponse)
     @app.post("/stream", response_model=StreamResponse)
     def stream(request: StreamRequest) -> StreamResponse:
         """Score a batch of transactions in a single forward pass."""
         start = time.perf_counter()
         try:
             ft_probs = [t.ft_probability for t in request.transactions]
-            if all(p is None for p in ft_probs):
-                ft_probs_arg: list[float] | None = None
-            elif any(p is None for p in ft_probs):
-                raise ValueError("ft_probability must be set for all or none of the batch")
-            else:
-                ft_probs_arg = [float(p) for p in ft_probs]
-
             densities = [t.history_density for t in request.transactions]
             intensities = [t.history_amount_intensity for t in request.transactions]
+
+            ft_continuous = [item.ft_continuous for item in request.transactions]
+            ft_categorical = [item.ft_categorical for item in request.transactions]
+            ft_sequences = [item.ft_sequence for item in request.transactions]
+
+            automatic_presence = [
+                (
+                    item.ft_continuous is not None,
+                    item.ft_categorical is not None,
+                    item.ft_sequence is not None,
+                )
+                for item in request.transactions
+            ]
+
+            for index, presence in enumerate(automatic_presence):
+                if any(presence) and not all(presence):
+                    raise ValueError(
+                        "ft_continuous, ft_categorical, and ft_sequence "
+                        f"must be provided together for transaction {index}"
+                    )
+
+            automatic_rows = [all(presence) for presence in automatic_presence]
+
+            if any(automatic_rows) and not all(automatic_rows):
+                raise ValueError(
+                    "Server-side FT-CAT inputs must be provided for every transaction "
+                    "or for none of them"
+                )
+
+            if all(automatic_rows):
+                if any(value is not None for value in ft_probs):
+                    raise ValueError(
+                        "ft_probability must not be provided when server-side "
+                        "FT-CAT inputs are supplied"
+                    )
+
+                if any(value is not None for value in densities) or any(
+                    value is not None for value in intensities
+                ):
+                    raise ValueError(
+                        "Manual history features must not be provided when "
+                        "ft_sequence is supplied"
+                    )
+
+            resolved_ft_probs = ft_probs
+            resolved_densities = densities
+            resolved_intensities = intensities
+            ft_model_used_flags = [False] * len(request.transactions)
+
+            if all(automatic_rows):
+                assert all(value is not None for value in ft_continuous)
+                assert all(value is not None for value in ft_categorical)
+                assert all(value is not None for value in ft_sequences)
+
+                resolved_ft_probs = (
+                    app.state.scorer._predict_ft(
+                        [value for value in ft_continuous if value is not None],
+                        [value for value in ft_categorical if value is not None],
+                        [value for value in ft_sequences if value is not None],
+                    )
+                    .astype(float)
+                    .tolist()
+                )
+
+                velocity = (
+                    extract_velocity_features(
+                        [value for value in ft_sequences if value is not None],
+                        transaction_amount_index=0,
+                    )
+                    .cpu()
+                    .numpy()
+                )
+
+                resolved_densities = velocity[:, 0].astype(float).tolist()
+                resolved_intensities = velocity[:, 1].astype(float).tolist()
+                ft_model_used_flags = [True] * len(request.transactions)
+
+            if all(p is None for p in resolved_ft_probs):
+                ft_probs_arg: list[float] | None = None
+            elif any(p is None for p in resolved_ft_probs):
+                raise ValueError("ft_probability must be set for all or none of the batch")
+            else:
+                ft_probs_arg = [float(p) for p in resolved_ft_probs]
 
             velocity_missing = [
                 density is None or intensity is None
                 for density, intensity in zip(
-                    densities,
-                    intensities,
+                    resolved_densities,
+                    resolved_intensities,
                 )
             ]
 
@@ -588,8 +1008,8 @@ def create_app(config: Config | None = None) -> FastAPI:
                     [
                         [float(density), float(intensity)]
                         for density, intensity in zip(
-                            densities,
-                            intensities,
+                            resolved_densities,
+                            resolved_intensities,
                         )
                     ],
                     dtype=np.float32,
@@ -611,11 +1031,16 @@ def create_app(config: Config | None = None) -> FastAPI:
                 transaction_id=payload.transaction_id,
                 **raw,
                 latency_ms=latency_ms,
+                ft_probability=(
+                    resolved_ft_probs[index] if resolved_ft_probs is not None else None
+                ),
+                ft_model_used=ft_model_used_flags[index],
             )
-            for payload, raw in zip(request.transactions, results_raw)
+            for index, (payload, raw) in enumerate(zip(request.transactions, results_raw))
         ]
         return StreamResponse(results=results, count=len(results), total_latency_ms=latency_ms)
 
+    @app.post("/api/v1/explain", response_model=ExplainResponse)
     @app.post("/explain", response_model=ExplainResponse)
     def explain(request: ExplainRequest) -> ExplainResponse:
         """Explain the primary risk drivers for a transaction."""
@@ -637,6 +1062,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             latency_ms=latency_ms,
         )
 
+    @app.get("/api/v1/health", response_model=HealthResponse)
     @app.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         """Liveness and readiness summary."""
@@ -646,8 +1072,14 @@ def create_app(config: Config | None = None) -> FastAPI:
             model_loaded=app.state.scorer.model_loaded,
             uptime_s=time.perf_counter() - app.state.start_time,
             gate_loaded=app.state.scorer.gate is not None,
+            conformal_loaded=(
+                app.state.scorer.conformal_alpha is not None
+                and app.state.scorer.conformal_threshold is not None
+            ),
+            ft_model_loaded=app.state.scorer.ft_model is not None,
         )
 
+    @app.get("/api/v1/metrics", response_model=MetricsResponse)
     @app.get("/metrics", response_model=MetricsResponse)
     async def metrics() -> MetricsResponse:
         """Self-monitoring counters: volume, errors, latency percentiles."""
