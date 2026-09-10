@@ -533,6 +533,35 @@ calibration and future examples. Financial transaction data are chronological
 and may undergo temporal or adversarial distribution shift. Consequently,
 98.99\% should be reported as observed chronological test coverage, not as an
 unconditional guarantee for future production traffic.
+A fourth limitation was identified and corrected during development. An
+early version of the automated test suite for the conformal evaluation
+script wrote its output artifacts to the same path used for production
+evaluation rather than an isolated temporary directory. Because tests were
+run locally during development, this could silently regenerate the serving
+threshold artifact from a small synthetic test fixture instead of the real
+calibration split. The issue was caught, the test harness was corrected to
+redirect all artifact writes to an isolated path, and the affected
+artifacts were regenerated from the real calibration data. It is reported
+here for transparency, and because it illustrates a general risk in ML
+pipelines: test code that exercises production code paths without
+isolating side effects can silently corrupt deployed artifacts without
+raising any error.
+A fifth limitation concerns model complexity versus measured benefit. An
+ablation comparing the fused FT-CAT transformer (94{,}305 parameters)
+against a self-attention-only variant and a flat MLP control, trained
+under an identical protocol across three random seeds, found the flat MLP
+control achieved the highest mean test PR-AUC (0.3698) of the three,
+exceeding both the self-attention-only variant (0.3376) and the full
+FT-CAT model (0.3380). Capacity and training budget were held fixed rather
+than independently tuned per variant, so this does not prove categorical
+feature interactions are unhelpful on this dataset, but it means the
+transformer's added architectural complexity is not currently justified by
+test-set performance, and is reported rather than left implicit. A related
+design choice worth flagging is the use of card1 (and addr1) as the entity
+key for constructing transaction-history features. card1 is a
+semi-persistent per-card identifier rather than a true anonymized session
+ID, so history-based features may partially encode card identity rather
+than purely behavioral signal.
 The SHAP implementation is also intentionally scoped. Current explanations
 describe the DAE anomaly component and do not provide a complete attribution of
 the final learned-gate decision. Extending explainability to the complete fused

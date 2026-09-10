@@ -216,7 +216,7 @@ def _load_conformal_threshold(
 
     try:
         configured_alpha = float(configured_alpha_value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         logger.warning(
             "Configured conformal alpha %r is invalid; using legacy threshold triage",
             configured_alpha_value,
