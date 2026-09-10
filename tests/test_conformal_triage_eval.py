@@ -361,4 +361,11 @@ def test_main_runs_end_to_end(tmp_path: Path, monkeypatch) -> None:
 
     from experiments.conformal_triage_eval import main
 
-    main(["--archive", str(archive_path)])
+    main(
+        [
+            "--archive",
+            str(archive_path),
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )

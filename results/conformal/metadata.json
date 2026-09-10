@@ -1,6 +1,6 @@
 {
   "experiment": "conformal_triage_evaluation",
-  "created_at_utc": "2026-09-07T07:37:41.618427+00:00",
+  "created_at_utc": "2026-09-10T13:58:05.722682+00:00",
   "archive_path": "results\\conformal\\conformal_inputs.npz",
   "seed": 42,
   "alpha_sweep": [
@@ -18,5 +18,5 @@
   "python_version": "3.13.15",
   "torch_version": "2.14.0+cpu",
   "numpy_version": "2.5.2",
-  "git_commit": "72c1cdbaab9c4dbaec1ed88008d60cf42c078eb2"
+  "git_commit": "a29e5952aee9e922fe03743052cafaa3ebbdf05b"
 }

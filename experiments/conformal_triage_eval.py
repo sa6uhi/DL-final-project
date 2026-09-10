@@ -641,6 +641,17 @@ def main(argv: list[str] | None = None) -> None:
             "calibration_labels, eval_probabilities, and eval_labels."
         ),
     )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("results") / "conformal",
+        help=(
+            "Directory for conformal_metrics.{csv,json}, metadata.json, and "
+            "serving_threshold.json. Tests MUST override this to an isolated "
+            "tmp_path so a small synthetic calibration set can never overwrite "
+            "the real, production serving_threshold.json."
+        ),
+    )
     args = parser.parse_args(argv)
 
     config = load_config()
@@ -685,7 +696,7 @@ def main(argv: list[str] | None = None) -> None:
         output_path=threshold_figure_path,
     )
 
-    results_dir = Path("results") / "conformal"
+    results_dir = args.output_dir
 
     export_conformal_results(
         results=results,

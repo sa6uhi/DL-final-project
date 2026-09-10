@@ -311,9 +311,15 @@ def control_score(cells: Sequence[SweepCell], metric: str = "pr_auc") -> float |
 def best_cell(cells: Sequence[SweepCell], metric: str = "pr_auc") -> SweepCell:
     """Return the focal cell with the highest score.
 
+    Selection MUST use validation performance, never ``test_metrics``: the
+    test split is reported once for the winner, not used to choose it. See
+    ``SweepCell.best_val_pr_auc``, which is exactly the quantity used for
+    early-stopping/checkpoint selection during that cell's own training run.
+
     Args:
         cells: Sweep cells produced by :func:`run_sweep`.
-        metric: Key of ``test_metrics`` to maximise.
+        metric: Key of ``test_metrics`` to report for the winner (does not
+            affect selection, which is always validation PR-AUC).
 
     Returns:
         The best-scoring focal cell.
@@ -324,7 +330,7 @@ def best_cell(cells: Sequence[SweepCell], metric: str = "pr_auc") -> SweepCell:
     focal = [cell for cell in cells if cell.loss == FOCAL_LOSS]
     if not focal:
         raise ValueError("no focal cells in the sweep")
-    return max(focal, key=lambda cell: cell.test_metrics[metric])
+    return max(focal, key=lambda cell: cell.best_val_pr_auc)
 
 
 def plot_focal_sweep(
