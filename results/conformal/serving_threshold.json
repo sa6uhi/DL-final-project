@@ -1,0 +1,5 @@
+{
+  "method": "split_conformal",
+  "alpha": 0.01,
+  "threshold": 1.0
+}

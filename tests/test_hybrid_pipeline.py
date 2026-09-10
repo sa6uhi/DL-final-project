@@ -195,7 +195,7 @@ def test_transformer_probabilities_rejects_non_vector_logits() -> None:
 
     with pytest.raises(
         ValueError,
-        match="Transformer logits must be one-dimensional",
+        match="Transformer logits must be 1D",
     ):
         transformer_probabilities(
             transformer=transformer,

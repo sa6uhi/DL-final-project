@@ -501,6 +501,181 @@ def test_serving_require_checkpoint_raises_when_missing(
         build_scorer(cfg)
 
 
+def test_predict_uses_matching_conformal_artifact(
+    tmp_path: Path,
+    features: list[float],
+) -> None:
+    """Matching configured alpha enables conformal serving decisions."""
+    import json
+
+    artifact_path = tmp_path / "serving_threshold.json"
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "method": "split_conformal",
+                "alpha": 0.01,
+                "threshold": 0.975174069404602,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = Config(
+        {
+            "autoencoder": {
+                "input_dim": 20,
+                "anomaly_score": {"l1_gamma": 0.4},
+            },
+            "serving": {
+                "model_path": str(tmp_path / "missing.pt"),
+                "anomaly_const": 2.0,
+                "conformal_path": str(artifact_path),
+            },
+            "scoring": {
+                "approve_threshold": 0.15,
+                "block_threshold": 0.85,
+                "escalate_threshold": 0.50,
+            },
+            "evaluation": {
+                "conformal": {
+                    "alpha": 0.01,
+                }
+            },
+        },
+        base_dir=tmp_path,
+    )
+
+    test_client = TestClient(create_app(cfg))
+
+    health = test_client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["conformal_loaded"] is True
+
+    response = test_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "transaction_id": "conformal-test",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["transaction_id"] == "conformal-test"
+    assert body["conformal_used"] is True
+    assert body["conformal_alpha"] == pytest.approx(0.01)
+    assert body["conformal_threshold"] == pytest.approx(0.975174069404602)
+    assert body["conformal_set"] is not None
+    assert body["decision"] in {
+        "auto_approve",
+        "auto_block",
+        "human_review",
+    }
+
+
+def test_serving_require_ft_model_raises_when_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured missing FT checkpoint can be made a startup failure."""
+    from src.serving.api import build_scorer
+
+    cfg = Config(
+        {
+            "autoencoder": {
+                "input_dim": 20,
+                "anomaly_score": {"l1_gamma": 0.4},
+            },
+            "serving": {
+                "model_path": str(tmp_path / "missing_autoencoder.pt"),
+                "transformer_path": str(tmp_path / "missing_transformer.pt"),
+                "anomaly_const": 2.0,
+            },
+            "scoring": {
+                "approve_threshold": 0.15,
+                "block_threshold": 0.85,
+                "escalate_threshold": 0.50,
+            },
+        },
+        base_dir=tmp_path,
+    )
+
+    monkeypatch.setenv("SERVING_REQUIRE_FT_MODEL", "1")
+
+    with pytest.raises(FileNotFoundError, match="SERVING_REQUIRE_FT_MODEL"):
+        build_scorer(cfg)
+
+
+@pytest.mark.parametrize(
+    ("legacy_path", "versioned_path"),
+    [
+        ("/health", "/api/v1/health"),
+        ("/metrics", "/api/v1/metrics"),
+    ],
+)
+def test_versioned_get_routes_match_legacy_routes(
+    client: TestClient,
+    legacy_path: str,
+    versioned_path: str,
+) -> None:
+    """Versioned GET endpoints preserve the legacy API contract."""
+    legacy = client.get(legacy_path)
+    versioned = client.get(versioned_path)
+
+    assert versioned.status_code == legacy.status_code
+
+    legacy_body = legacy.json()
+    versioned_body = versioned.json()
+
+    # uptime_s is computed live from time.perf_counter() on every call, so
+    # the legacy and versioned calls (made microseconds apart) will not
+    # match exactly -- everything else in the payload must still match.
+    legacy_body.pop("uptime_s", None)
+    versioned_body.pop("uptime_s", None)
+
+    assert versioned_body == legacy_body
+
+
+def test_versioned_predict_matches_legacy_predict(
+    client: TestClient,
+    features: list[float],
+) -> None:
+    """Versioned prediction endpoint exposes the same inference contract."""
+    payload = {
+        "transaction_id": "version-test",
+        "features": features,
+    }
+
+    legacy = client.post("/predict", json=payload)
+    versioned = client.post("/api/v1/predict", json=payload)
+
+    assert legacy.status_code == 200
+    assert versioned.status_code == 200
+
+    legacy_body = legacy.json()
+    versioned_body = versioned.json()
+
+    for field in (
+        "transaction_id",
+        "is_fraud",
+        "fraud_probability",
+        "anomaly_score",
+        "decision",
+        "gate_used",
+        "ft_model_used",
+        "conformal_used",
+        "conformal_set",
+        "conformal_alpha",
+        "conformal_threshold",
+    ):
+        if isinstance(legacy_body[field], float):
+            assert versioned_body[field] == pytest.approx(legacy_body[field])
+        else:
+            assert versioned_body[field] == legacy_body[field]
+
+
 def test_metrics_p99_matches_numpy(client: TestClient) -> None:
     """Metrics P90 and P99 use numpy.percentile calculation."""
     client.app.state.latencies = [1.0, 2.0, 3.0, 10.0, 100.0]
@@ -534,3 +709,150 @@ def test_predict_rejects_extra_fields(client: TestClient, features: list[float])
     payload = {"features": features, "ft_probabilty": 0.5}  # deliberate typo
     response = client.post("/predict", json=payload)
     assert response.status_code == 422
+
+
+@pytest.fixture()
+def ft_client(tmp_path) -> TestClient:
+    """Test client with a server-side FT-CAT checkpoint on disk."""
+    from src.models.ft_transformer import TabularMLP
+    from src.training.trainer_utils import save_checkpoint as save_ft_checkpoint
+
+    seed_everything(42)
+    ft_model = TabularMLP(
+        n_continuous=3,
+        categorical_cardinalities=[2, 2],
+        seq_len=2,
+        seq_dim=2,
+    )
+    ft_model.eval()
+    ft_path = tmp_path / "ft_transformer.pt"
+    save_ft_checkpoint(ft_model, ft_path)
+
+    cfg = Config(
+        {
+            "autoencoder": {
+                "input_dim": 20,
+                "anomaly_score": {"l1_gamma": 0.4},
+            },
+            "serving": {
+                "model_path": str(tmp_path / "missing.pt"),
+                "anomaly_const": 2.0,
+                "transformer_path": str(ft_path),
+            },
+            "scoring": {
+                "approve_threshold": 0.15,
+                "block_threshold": 0.85,
+                "escalate_threshold": 0.50,
+            },
+        },
+        base_dir=tmp_path,
+    )
+    return TestClient(create_app(cfg))
+
+
+def test_predict_with_automatic_ft_cat_inputs_uses_server_side_model(
+    ft_client: TestClient, features: list[float]
+) -> None:
+    """Providing ft_continuous/ft_categorical/ft_sequence runs server-side FT-CAT."""
+    response = ft_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "ft_continuous": [0.1, -0.2, 0.3],
+            "ft_categorical": [0, 1],
+            "ft_sequence": [[0.1, 0.2], [0.3, 0.4]],
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ft_model_used"] is True
+    assert 0.0 <= body["ft_probability"] <= 1.0
+    assert body["gate_used"] is False
+
+
+def test_predict_with_automatic_ft_cat_inputs_rejects_manual_ft_probability(
+    ft_client: TestClient, features: list[float]
+) -> None:
+    """ft_probability must not be supplied alongside server-side FT-CAT inputs."""
+    response = ft_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "ft_probability": 0.5,
+            "ft_continuous": [0.1, -0.2, 0.3],
+            "ft_categorical": [0, 1],
+            "ft_sequence": [[0.1, 0.2], [0.3, 0.4]],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_predict_with_automatic_ft_cat_inputs_rejects_partial_fields(
+    ft_client: TestClient, features: list[float]
+) -> None:
+    """ft_continuous/ft_categorical/ft_sequence must be provided together."""
+    response = ft_client.post(
+        "/predict",
+        json={
+            "features": features,
+            "ft_continuous": [0.1, -0.2, 0.3],
+            "ft_categorical": [0, 1],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_stream_with_automatic_ft_cat_inputs_scores_batch(
+    ft_client: TestClient, features: list[float]
+) -> None:
+    """/stream runs server-side FT-CAT for every transaction when supplied."""
+    transaction = {
+        "features": features,
+        "ft_continuous": [0.1, -0.2, 0.3],
+        "ft_categorical": [0, 1],
+        "ft_sequence": [[0.1, 0.2], [0.3, 0.4]],
+    }
+    response = ft_client.post(
+        "/stream",
+        json={"transactions": [transaction, transaction]},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 2
+    for result in body["results"]:
+        assert result["ft_model_used"] is True
+        assert 0.0 <= result["ft_probability"] <= 1.0
+
+
+def test_predict_clamps_out_of_vocabulary_categorical_code_to_unk(
+    ft_client: TestClient, features: list[float]
+) -> None:
+    """An out-of-range categorical code is clamped to <UNK> (0), mirroring
+    the training-time contract in train_transformer._to_code_matrix() /
+    FraudPreprocessor, instead of being rejected outright. Held-out data can
+    legitimately contain category codes that were never seen at fit time
+    (e.g. a browser/device string only present after the training cutoff).
+    """
+    base_payload = {
+        "features": features,
+        "ft_continuous": [0.1, -0.2, 0.3],
+        "ft_sequence": [[0.1, 0.2], [0.3, 0.4]],
+    }
+
+    out_of_vocab_response = ft_client.post(
+        "/predict",
+        json={**base_payload, "ft_categorical": [5, 1]},
+    )
+    clamped_response = ft_client.post(
+        "/predict",
+        json={**base_payload, "ft_categorical": [0, 1]},
+    )
+
+    assert out_of_vocab_response.status_code == 200
+    assert clamped_response.status_code == 200
+
+    out_of_vocab_body = out_of_vocab_response.json()
+    clamped_body = clamped_response.json()
+
+    assert out_of_vocab_body["ft_model_used"] is True
+    assert out_of_vocab_body["ft_probability"] == pytest.approx(clamped_body["ft_probability"])

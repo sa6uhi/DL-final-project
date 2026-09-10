@@ -13,8 +13,10 @@ Run with:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Final, NamedTuple
+from urllib import error, request
 
 import streamlit as st
 
@@ -27,6 +29,12 @@ PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 CHECKPOINT_DIR: Final[Path] = PROJECT_ROOT / "models" / "checkpoints"
 FIGURES_DIR: Final[Path] = PROJECT_ROOT / "figures"
 RESULTS_DIR: Final[Path] = PROJECT_ROOT / "results"
+
+API_BASE_URL: Final[str] = os.getenv(
+    "FRAUD_API_URL",
+    "http://127.0.0.1:8000",
+).rstrip("/")
+API_TIMEOUT_SECONDS: Final[float] = 10.0
 
 DAE_CHECKPOINT: Final[Path] = CHECKPOINT_DIR / "autoencoder.pt"
 FT_CHECKPOINT: Final[Path] = CHECKPOINT_DIR / "ft_transformer.pt"
@@ -41,6 +49,10 @@ SHAP_LOCAL_FIGURE: Final[Path] = FIGURES_DIR / "explainability" / "dae_shap_wate
 SHAP_CONSISTENCY_FIGURE: Final[Path] = FIGURES_DIR / "explainability" / "dae_shap_consistency.png"
 
 SHAP_CONSISTENCY_RESULTS: Final[Path] = RESULTS_DIR / "explainability" / "dae_shap_consistency.json"
+
+TEST_DATA: Final[Path] = PROJECT_ROOT / "data" / "processed" / "test.parquet"
+FT_FEATURE_SPEC: Final[Path] = PROJECT_ROOT / "data" / "processed" / "ft_cat_features.json"
+CONFIG_PATH: Final[Path] = PROJECT_ROOT / "config" / "config.yaml"
 
 CONFORMAL_COVERAGE_FIGURE: Final[Path] = FIGURES_DIR / "conformal" / "coverage_vs_workload.png"
 
@@ -156,6 +168,129 @@ def safe_metric(
             return float(value)
 
     return None
+
+
+def api_url(path: str) -> str:
+    """Build one versioned FastAPI endpoint URL."""
+    return f"{API_BASE_URL}/api/v1/{path.lstrip('/')}"
+
+
+def api_get(path: str) -> dict[str, Any]:
+    """Fetch JSON from the FastAPI service."""
+    endpoint = api_url(path)
+
+    try:
+        with request.urlopen(
+            endpoint,
+            timeout=API_TIMEOUT_SECONDS,
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"API request failed with HTTP {exc.code}: {detail}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Unable to reach fraud API at {API_BASE_URL}: {exc.reason}") from exc
+    except (TimeoutError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Invalid API response from {endpoint}: {exc}") from exc
+
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Unexpected API response from {endpoint}")
+
+    return payload
+
+
+def api_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """POST JSON to the FastAPI service and return its JSON response."""
+    endpoint = api_url(path)
+    body = json.dumps(payload).encode("utf-8")
+
+    http_request = request.Request(
+        endpoint,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(
+            http_request,
+            timeout=API_TIMEOUT_SECONDS,
+        ) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"API request failed with HTTP {exc.code}: {detail}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Unable to reach fraud API at {API_BASE_URL}: {exc.reason}") from exc
+    except (TimeoutError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Invalid API response from {endpoint}: {exc}") from exc
+
+    if not isinstance(response_payload, dict):
+        raise RuntimeError(f"Unexpected API response from {endpoint}")
+
+    return response_payload
+
+
+@st.cache_data(show_spinner=False)
+def load_demo_transactions() -> Any:
+    """Load the processed held-out test split for live demo scoring."""
+    import pandas as pd
+
+    if not TEST_DATA.is_file():
+        raise RuntimeError(f"Held-out test data not found: {TEST_DATA}")
+
+    return pd.read_parquet(TEST_DATA)
+
+
+@st.cache_data(show_spinner=False)
+def load_ft_feature_spec() -> dict[str, Any]:
+    """Load the FT-CAT feature contract used by the trained checkpoint."""
+    data = load_json(FT_FEATURE_SPEC)
+
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Invalid FT-CAT feature specification: {FT_FEATURE_SPEC}")
+
+    return data
+
+
+@st.cache_data(show_spinner=False)
+def load_dae_feature_columns() -> list[str]:
+    """Resolve the ordered 800-feature DAE serving contract."""
+    import pandas as pd
+
+    from src.training.dae_features import resolve_dae_feature_columns
+    from src.utils.config import load_config
+
+    config = load_config(CONFIG_PATH)
+
+    frame = pd.read_parquet(TEST_DATA)
+
+    return resolve_dae_feature_columns(
+        frame,
+        non_feature_cols=list(config.data.non_feature_cols),
+        expected_dim=int(config.autoencoder.input_dim),
+    )
+
+
+def build_prediction_payload(row: Any) -> dict[str, Any]:
+    """Build one real FastAPI prediction payload from a held-out row."""
+    import numpy as np
+
+    spec = load_ft_feature_spec()
+    dae_columns = load_dae_feature_columns()
+
+    dae_features = row.loc[dae_columns].to_numpy(dtype=np.float32)
+    ft_continuous = row.loc[spec["continuous_cols"]].to_numpy(dtype=np.float32)
+    ft_categorical = row.loc[spec["categorical_cols"]].to_numpy(dtype=np.int64)
+    ft_sequence = np.stack(row["sequence_array"]).astype(np.float32)
+
+    return {
+        "transaction_id": str(int(row["TransactionID"])),
+        "features": dae_features.astype(float).tolist(),
+        "ft_continuous": ft_continuous.astype(float).tolist(),
+        "ft_categorical": ft_categorical.astype(int).tolist(),
+        "ft_sequence": ft_sequence.astype(float).tolist(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -648,6 +783,49 @@ def command_page() -> None:
         "FT-CAT • DAE • Learned Gate • Split Conformal Prediction",
     )
 
+    st.markdown(
+        '<div class="section-title">Live API Status</div>',
+        unsafe_allow_html=True,
+    )
+
+    try:
+        health = api_get("health")
+    except RuntimeError as exc:
+        st.error(str(exc))
+    else:
+        health_columns = st.columns(4)
+
+        with health_columns[0]:
+            render_metric_card(
+                "FastAPI",
+                "ONLINE",
+                API_BASE_URL,
+            )
+
+        with health_columns[1]:
+            render_metric_card(
+                "FT-CAT Runtime",
+                "READY" if health.get("ft_model_loaded") else "NOT LOADED",
+                "Server-side supervised fraud model",
+                accent="green" if health.get("ft_model_loaded") else "yellow",
+            )
+
+        with health_columns[2]:
+            render_metric_card(
+                "Learned Gate",
+                "READY" if health.get("gate_loaded") else "NOT LOADED",
+                "Dynamic fraud-signal fusion",
+                accent="green" if health.get("gate_loaded") else "yellow",
+            )
+
+        with health_columns[3]:
+            render_metric_card(
+                "Conformal",
+                "READY" if health.get("conformal_loaded") else "NOT LOADED",
+                "Uncertainty-aware triage",
+                accent="green" if health.get("conformal_loaded") else "yellow",
+            )
+
     conformal_data = select_conformal_result(
         load_json(CONFORMAL_RESULTS),
         alpha=0.01,
@@ -860,70 +1038,216 @@ def command_page() -> None:
 # Prediction
 # ---------------------------------------------------------------------------
 def prediction_page() -> None:
-    """Render single-transaction workflow explanation."""
+    """Run live fraud scoring for a real held-out transaction."""
     render_header(
-        "Single Prediction",
-        "Inspect the model path for one prepared transaction.",
+        "Live Prediction",
+        "Score a real held-out transaction through the production API.",
     )
 
-    st.warning(
-        "Raw interactive transaction scoring is intentionally not exposed "
-        "yet. The trained models currently consume the project's processed "
-        "feature representation rather than a simplified human-entry form."
-    )
+    try:
+        frame = load_demo_transactions()
+    except Exception as exc:
+        st.error(f"Unable to load held-out test transactions: {exc}")
+        return
+
+    if frame.empty:
+        st.warning("Held-out test dataset contains no transactions.")
+        return
 
     st.markdown(
-        '<div class="section-title">Decision Semantics</div>',
+        '<div class="section-title">Transaction Selection</div>',
         unsafe_allow_html=True,
     )
 
-    col1, col2, col3 = st.columns(3)
+    selection_mode = st.radio(
+        "Example type",
+        ("Fraud", "Legitimate", "Random"),
+        horizontal=True,
+    )
 
-    with col1:
+    if selection_mode == "Fraud":
+        candidates = frame[frame["isFraud"] == 1]
+    elif selection_mode == "Legitimate":
+        candidates = frame[frame["isFraud"] == 0]
+    else:
+        candidates = frame
+
+    if candidates.empty:
+        st.warning(f"No {selection_mode.lower()} transactions are available.")
+        return
+
+    max_index = min(len(candidates) - 1, 1000)
+
+    example_index = st.number_input(
+        "Example index",
+        min_value=0,
+        max_value=max_index,
+        value=0,
+        step=1,
+    )
+
+    if selection_mode == "Random":
+        selected_row = candidates.sample(
+            n=1,
+            random_state=int(example_index),
+        ).iloc[0]
+    else:
+        selected_row = candidates.iloc[int(example_index)]
+
+    transaction_id = int(selected_row["TransactionID"])
+    ground_truth = int(selected_row["isFraud"])
+    processed_amount = float(selected_row["TransactionAmt"])
+
+    info_columns = st.columns(3)
+
+    with info_columns[0]:
         render_metric_card(
-            "Auto-Approve",
-            "{0}",
-            "Legitimate-only conformal prediction set",
+            "Transaction ID",
+            str(transaction_id),
+            "Real chronological held-out transaction",
         )
 
-    with col2:
+    with info_columns[1]:
         render_metric_card(
-            "Human Review",
-            "{0,1} / {}",
-            "Ambiguous or empty prediction set",
-            accent="yellow",
+            "Ground Truth",
+            "FRAUD" if ground_truth == 1 else "LEGITIMATE",
+            "Held-out label used only after prediction",
+            accent="yellow" if ground_truth == 1 else "green",
         )
 
-    with col3:
+    with info_columns[2]:
         render_metric_card(
-            "Auto-Block",
-            "{1}",
-            "Fraud-only conformal prediction set",
+            "Processed Amount",
+            f"{processed_amount:.4f}",
+            "Scaled model input, not raw currency value",
         )
+
+    st.markdown("")
+
+    if not st.button(
+        "Run Fraud Analysis",
+        type="primary",
+        use_container_width=True,
+    ):
+        st.info(
+            "Select a held-out transaction and run the full "
+            "DAE + FT-CAT + gate + conformal pipeline."
+        )
+        return
+
+    try:
+        payload = build_prediction_payload(selected_row)
+
+        with st.spinner("Running production fraud models..."):
+            result = api_post("predict", payload)
+
+    except Exception as exc:
+        st.error(f"Prediction failed: {exc}")
+        return
 
     st.markdown(
-        '<div class="section-title">Scoring Path</div>',
+        '<div class="section-title">Live Model Output</div>',
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        """
-        <div class="pipeline-card">
-            <span class="pipeline-node">Processed Features</span>
-            →
-            <span class="pipeline-node">DAE</span>
-            +
-            <span class="pipeline-node">FT-CAT</span>
-            +
-            <span class="pipeline-node">History</span>
-            →
-            <span class="pipeline-node pipeline-accent">Gate</span>
-            →
-            <span class="pipeline-node pipeline-accent">Conformal Set</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    ft_probability = result.get("ft_probability")
+    anomaly_score = result.get("anomaly_score")
+    fraud_probability = result.get("fraud_probability")
+    decision = result.get("decision")
+    conformal_set = result.get("conformal_set")
+    latency_ms = result.get("latency_ms")
+
+    metric_columns = st.columns(4)
+
+    with metric_columns[0]:
+        render_metric_card(
+            "FT-CAT Probability",
+            (
+                f"{float(ft_probability) * 100:.2f}%"
+                if isinstance(ft_probability, (int, float))
+                else "N/A"
+            ),
+            "Supervised fraud probability",
+        )
+
+    with metric_columns[1]:
+        render_metric_card(
+            "DAE Anomaly Score",
+            (f"{float(anomaly_score):.4f}" if isinstance(anomaly_score, (int, float)) else "N/A"),
+            "Reconstruction-based anomaly signal",
+        )
+
+    with metric_columns[2]:
+        render_metric_card(
+            "Fused Probability",
+            (
+                f"{float(fraud_probability) * 100:.2f}%"
+                if isinstance(fraud_probability, (int, float))
+                else "N/A"
+            ),
+            "Learned hybrid gate output",
+        )
+
+    with metric_columns[3]:
+        render_metric_card(
+            "Latency",
+            (f"{float(latency_ms):.2f} ms" if isinstance(latency_ms, (int, float)) else "N/A"),
+            "FastAPI inference latency",
+        )
+
+    decision_columns = st.columns(2)
+
+    with decision_columns[0]:
+        st.markdown(
+            '<div class="section-title">Conformal Prediction</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.code(
+            str(conformal_set) if conformal_set is not None else "Conformal prediction unavailable"
+        )
+
+    with decision_columns[1]:
+        st.markdown(
+            '<div class="section-title">Operational Decision</div>',
+            unsafe_allow_html=True,
+        )
+
+        decision_labels = {
+            "auto_approve": "AUTO-APPROVE",
+            "auto_block": "AUTO-BLOCK",
+            "human_review": "HUMAN REVIEW",
+            "escalate": "ESCALATE",
+        }
+
+        decision_text = decision_labels.get(
+            str(decision),
+            str(decision).upper(),
+        )
+
+        if decision == "auto_block":
+            st.error(decision_text)
+        elif decision in {"human_review", "escalate"}:
+            st.warning(decision_text)
+        else:
+            st.success(decision_text)
+
+    st.caption(
+        "Pipeline engaged — "
+        f"FT-CAT model: {'yes' if result.get('ft_model_used') else 'no'} · "
+        f"Learned gate fusion: {'yes' if result.get('gate_used') else 'no'} · "
+        f"Conformal calibration: {'yes' if result.get('conformal_used') else 'no'}"
     )
+
+    predicted_fraud = bool(result.get("is_fraud"))
+
+    if predicted_fraud == bool(ground_truth):
+        st.success("Point prediction matches the held-out ground-truth label.")
+    else:
+        st.warning("Point prediction differs from the held-out ground-truth label.")
+
+    with st.expander("API response"):
+        st.json(result)
 
 
 # ---------------------------------------------------------------------------
