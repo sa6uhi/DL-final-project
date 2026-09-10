@@ -96,7 +96,9 @@ def load_json(path: Path) -> dict[str, Any] | list[dict[str, Any]]:
     try:
         with path.open("r", encoding="utf-8") as handle:
             data = json.load(handle)
-    except (OSError, json.JSONDecodeError):
+    except OSError:
+        return {}
+    except json.JSONDecodeError:
         return {}
 
     if isinstance(data, dict):

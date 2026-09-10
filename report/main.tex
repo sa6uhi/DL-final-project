@@ -282,6 +282,31 @@ The trained DAE, FT-CAT, and learned gate can be exported to PyTorch EXIR and
 ONNX. Export routines validate numerical parity against PyTorch inference.
 \section{Results}
 \label{sec:results}
+\subsection{Classical Baselines}
+Logistic regression, random forest, and LightGBM baselines were trained on
+the upstream-model training split and evaluated on the chronological
+development-validation split (88{,}581 transactions).
+Table~\ref{tab:baselines} reports validation PR-AUC and ROC-AUC.
+\begin{table}[t]
+\caption{Classical baselines on the chronological development-validation set.}
+\label{tab:baselines}
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Model & PR-AUC & ROC-AUC \\
+\midrule
+Logistic Regression (balanced) & 0.4354 & 0.8534 \\
+Random Forest (200 trees, depth 16) & 0.4542 & 0.8743 \\
+LightGBM (weighted) & 0.5089 & 0.8991 \\
+\bottomrule
+\end{tabular}
+\end{table}
+The random forest uses a maximum depth of 16 and a minimum leaf size of 10:
+without a depth limit, 200 fully grown trees on the full training data
+produced a 550\,MB checkpoint with multi-second inference stalls, while the
+constrained model compresses to 56\,MB and scores the full validation split
+in 0.3\,s on CPU. Final out-of-time test comparison against the deep models
+is reported with the Exp-1 evaluation.
 \subsection{FT-CAT Performance}
 Table~\ref{tab:ftcat} reports final FT-CAT performance on the chronological
 held-out test set.
@@ -458,6 +483,11 @@ beyond 128 produced no additional throughput benefit in the tested CPU
 environment.
 These measurements describe model-side neural inference and should not be
 interpreted as complete HTTP API latency.
+At the component level, the servable DAE scorer was benchmarked separately
+with 200 timed iterations per cell on CPU across batch sizes 1--64. At batch
+size 1, P99 latency was 0.71~ms for PyTorch eager execution, 0.99~ms for the
+EXIR export, and 0.14~ms for ONNX, all well within the 15~ms service
+objective; DAE-scorer P99 remained below 1~ms at every tested batch size.
 \begin{figure}[t]
 \centering
 \includegraphics[
@@ -468,9 +498,14 @@ interpreted as complete HTTP API latency.
 \label{fig:throughput}
 \end{figure}
 \subsection{Deployment and Serialization}
-The trained DAE, FT-CAT, and learned gate were successfully serialized to both
-PyTorch EXIR and ONNX representations. Export-time parity checks compare
-serialized outputs with their PyTorch reference implementations.
+The trained DAE (485{,}440 parameters, 1.95\,MB checkpoint) was serialized to
+both PyTorch EXIR (2.00\,MB) and ONNX (1.96\,MB) representations. Export-time
+parity checks compare serialized outputs with their PyTorch reference
+implementations. The FT-CAT and learned-gate checkpoints follow the same
+export pipeline once their training lands.
+The containerized FastAPI scoring service (single CPU worker, DAE-only
+scoring) holds a steady-state resident footprint of approximately 310\,MiB
+inside a 1.91\,GB uncompressed inference image.
 The product additionally exposes a FastAPI scoring interface and a Streamlit
 analyst dashboard. The dashboard surfaces prediction, batch analysis, model
 insights, conformal triage, explainability, and artifact-readiness information.
