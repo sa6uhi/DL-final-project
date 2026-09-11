@@ -789,6 +789,7 @@
 % ---------------------------------------------------------------------
 % 17. Latency
 % ---------------------------------------------------------------------
+\speaker{\sSebuhi}
 \begin{frame}{Fast enough to serve on a single CPU}
   \vspace{0.1em}
   \begin{columns}[T]
@@ -804,6 +805,65 @@
   \keyline{FT-CAT dominates (5.05 of 6.56 ms)\enspace\textperiodcentered\enspace
     \textbf{full-pipeline P99 26.95 ms} misses 15 ms; the DAE scorer meets it}
   \source{Single-CPU container host; 10 warm-up + 50 timed runs; model-side only (no HTTP, no SHAP).}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% 17b. Serving stack
+% ---------------------------------------------------------------------
+\speaker{\sSebuhi}
+\begin{frame}{From checkpoint to endpoint: the serving stack}
+  \vspace{0.5em}
+  \centering
+  \resizebox{\linewidth}{!}{%
+  \begin{tikzpicture}[font=\footnotesize]
+    \node[box=brand,text width=2.6cm,minimum height=3.9cm] (api) at (0,0)
+      {\textbf{FastAPI}\\[4pt]\texttt{POST /predict}\\\texttt{POST /stream}\\\texttt{POST /explain}\\\texttt{GET /health}\\\texttt{GET /metrics}};
+    \node[box=brandmid,text width=2.9cm,minimum height=3.9cm] (rt) at (4.15,0)
+      {\textbf{Scorers (CPU)}\\[4pt]DAE ONNX 0.14 ms\\DAE EXIR 0.99 ms\\FT-CAT 5.05 ms\\gate 0.12 ms\\[2pt]{\scriptsize P99, batch 1}};
+    \node[box=review,text width=2.9cm,minimum height=3.9cm] (ui) at (8.3,0)
+      {\textbf{Streamlit triage}\\[4pt]live feed\\conformal badges\\SHAP waterfall\\analyst actions};
+
+    \draw[arr] (api.east) -- (rt.west);
+    \draw[arr] (rt.east) -- (ui.west);
+    \draw[arr] (ui.north) -- ++(0,0.55) -| (api.north);
+  \end{tikzpicture}}
+  \vfill
+  \takeaway{Checkpoints are exported once (EXIR $+$ ONNX); the API serves them
+    statelessly and the dashboard reads the same endpoints the graders can curl.}
+  \source{DAE scorer P99 0.71 ms eager; full fusion pipeline median 6.56 ms, P99 26.95 ms.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% 17c. Reproducibility and delivery
+% ---------------------------------------------------------------------
+\speaker{\sSebuhi}
+\begin{frame}{One command reproduces everything}
+  \vspace{0.4em}
+  \begin{columns}[c]
+    \column{0.52\textwidth}
+      \centering
+      \resizebox{\linewidth}{!}{%
+      \begin{tikzpicture}[font=\footnotesize]
+        \node[blk=brand,text width=2.4cm] (sh) at (0,1.5) {\texttt{./run\_all.sh}};
+        \node[blk=muted,text width=2.4cm] (dp) at (0,0.35) {download + prepare\\(always runs)};
+        \node[blk=muted,text width=2.4cm] (tr) at (0,-0.8) {train, or skip\\if checkpoints exist};
+        \node[blk=gatec,text width=2.4cm] (ev) at (0,-1.95) {evaluate + serialize\\(EXIR / ONNX)};
+        \draw[arr] (sh.south) -- (dp.north);
+        \draw[arr] (dp.south) -- (tr.north);
+        \draw[arr] (tr.south) -- (ev.north);
+      \end{tikzpicture}}
+    \column{0.45\textwidth}
+      \small\textbf{\color{brand}Ship}\par
+      \footnotesize \texttt{init} $\rightarrow$ \texttt{train} $\rightarrow$ \texttt{infer}
+      images, published to GHCR; compose profiles start API or API $+$ dashboard.\par
+      \vspace{0.55em}
+      \small\textbf{\color{brand}Gate}\par
+      \footnotesize CI runs black, flake8, and 787 tests with an 80\% coverage gate;
+      fresh-clone reproduction verified end to end.\par
+  \end{columns}
+  \vfill
+  \takeaway{No notebook state, no manual steps: the exact artefacts in the paper
+    rebuild from a clean checkout with one command.}
 \end{frame}
 
 % ---------------------------------------------------------------------
