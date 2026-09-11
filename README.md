@@ -143,7 +143,7 @@ Latencies above are run means from the artifact; the paper (Table 4) reports med
 
 The sub-15 ms P99 service objective applies to the DAE scorer (0.71 ms PyTorch-eager P99 at batch size 1 on CPU, 0.99 ms EXIR, 0.14 ms ONNX); end-to-end pipeline latencies are reported as measured.
 
-All timings were measured on a single-CPU container host (Intel i7-12700H) and
+All timings were measured on a single-CPU container host and
 are hardware-dependent — expect different absolute numbers on other machines;
 component ordering and batch-size trends should reproduce.
 
@@ -259,9 +259,13 @@ uses `venv/bin/python` when the virtualenv exists at `./venv`, and installs
 are pinned in `requirements.txt`, but only Docker guarantees the exact BLAS /
 CPU instruction set the benchmark numbers were measured with.
 
-Run the full pipeline:
+Run the full pipeline (create and activate the virtualenv first if you have
+not already done so):
 
 ```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ./run_all.sh
 ```
 

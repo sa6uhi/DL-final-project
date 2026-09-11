@@ -283,7 +283,7 @@ configuration is centralized in configuration files, and fixed random seeds are
 used for reproducibility (\texttt{seed\_everything(42)} for training runs;
 gate robustness evaluated at seeds 42, 123, and 2026; FT-CAT checkpoint records
 seed 42). Benchmarks were measured on a single-CPU container host
-(Intel i7-12700H) with PyTorch CPU builds; the data split is strictly
+with PyTorch CPU builds; the data split is strictly
 chronological (70/15/15 by \texttt{TransactionDT}) with scalers and vocabularies
 fitted on the training block only. Tests cover the gating network, conformal predictor,
 SHAP integration, dashboard behavior, and serialization.
@@ -496,7 +496,7 @@ beyond 128 produced no additional throughput benefit in the tested CPU
 environment.
 These measurements describe model-side neural inference and should not be
 interpreted as complete HTTP API latency. All latency and throughput figures
-were measured on a single-CPU container host (Intel i7-12700H) and are
+were measured on a single-CPU container host and are
 hardware-dependent: absolute timings will vary across CPUs, while the relative
 ordering of components and batch-size trends should reproduce.
 At the component level, the servable DAE scorer was benchmarked separately
