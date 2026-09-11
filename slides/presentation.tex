@@ -1,5 +1,5 @@
 % =====================================================================
-%  DEFENSE SLIDE DECK (15-20 min)
+%  DEFENSE SLIDE DECK (15-20 min), written for a beginner audience
 %  Real-Time Financial Fraud Detection with Learned Hybrid Gating and
 %  Uncertainty-Aware Triage
 %
@@ -10,9 +10,9 @@
 %  results with:  .venv/Scripts/python presentation/make_figures.py
 %  Every number on these slides matches report/main.tex or results/.
 %
-%  Timing guide (~17 min main deck):
-%    Motivation 2.5 min | Method 5 min | Experiments & results 7.5 min |
-%    Product + conclusion 2 min | Backup slides for Q&A only
+%  Timing guide (20 slides, ~17 min):
+%    Why it matters 3 min | How it works 5 min | Results 7 min |
+%    Product + wrap-up 2 min
 % =====================================================================
 \RequirePackage{fix-cm}
 \documentclass[aspectratio=169,11pt]{beamer}
@@ -25,7 +25,6 @@
 \usepackage{booktabs}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing,fit}
-\usepackage{appendixnumberbeamer}
 \usefonttheme{professionalfonts}
 
 % Fira Sans when available (Overleaf has it), DejaVu Sans otherwise.
@@ -76,15 +75,18 @@
   blk/.style={rounded corners=4pt,draw=#1,fill=#1!9,line width=1pt,align=center,
     text=ink,inner sep=4pt},
   blk/.default=brand,
-  inp/.style={rounded corners=3pt,draw=#1,fill=#1!9,line width=0.9pt,text width=3.4cm,
+  inp/.style={rounded corners=3pt,draw=#1,fill=#1!9,line width=0.9pt,text width=4.1cm,
     align=left,inner sep=4pt,text=ink},
   inp/.default=muted,
   neuron/.style={circle,minimum size=4.2mm,inner sep=0pt,draw=#1,fill=#1!20,line width=0.8pt},
   neuron/.default=gatec,
   arr/.style={-{Stealth[length=2.3mm]},line width=1pt,draw=muted},
-  tok/.style={minimum width=4.2mm,minimum height=3.2mm,inner sep=0pt,draw=white,line width=0.5pt},
   pill/.style={fill=#1,text=white,rounded corners=3pt,font=\footnotesize\bfseries,
     minimum width=2.2cm,minimum height=0.55cm},
+  detail/.style={draw=brandmid,fill=brandmid!12,rounded corners=2pt,minimum width=2.1cm,
+    minimum height=0.46cm,font=\scriptsize,text=ink,inner sep=2pt},
+  past/.style={draw=review,fill=review!35,rounded corners=2pt,minimum width=0.55cm,
+    minimum height=0.46cm,font=\scriptsize\bfseries,text=ink,inner sep=0pt},
 }
 
 % ---------------------------------------------------------------------
@@ -104,7 +106,7 @@
 \setbeamerfont{frametitle}{size=\Large,series=\bfseries}
 \setbeamerfont{kicker}{size=\scriptsize,series=\bfseries}
 
-% Thin progress bar across the top of every main-deck frame.
+% Thin progress bar across the top of every frame.
 \setbeamertemplate{headline}{%
   \begin{tikzpicture}
     \fill[brandlight] (0,0) rectangle (\paperwidth,0.55ex);
@@ -113,7 +115,7 @@
   \end{tikzpicture}%
 }
 
-% Section kicker above an assertion-style frame title.
+% Section kicker above a plain-language frame title.
 \setbeamertemplate{frametitle}{%
   \nointerlineskip
   \begin{beamercolorbox}[wd=\paperwidth,sep=0pt,leftskip=0.9cm,rightskip=0.9cm]{frametitle}%
@@ -124,16 +126,9 @@
   \end{beamercolorbox}%
 }
 
-% Speaker tag (bottom left) + slide counter (bottom right).
-\def\speakername{}
-\newcommand{\speaker}[1]{\gdef\speakername{#1}}
+% Slide counter (bottom right).
 \setbeamertemplate{footline}{%
   \hbox to \paperwidth{%
-    \hspace{0.9cm}%
-    {\scriptsize\color{muted}%
-      \ifx\speakername\empty\else
-        \textcolor{brandmid}{\rule[-0.15ex]{0.55ex}{1.35ex}}\ \speakername
-      \fi}%
     \hfill
     {\scriptsize\color{muted}Fraud Triage Engine\quad
       \textcolor{ink}{\insertframenumber}\,/\,\inserttotalframenumber}%
@@ -142,7 +137,6 @@
 }
 
 \setbeamertemplate{itemize items}{\textcolor{brandmid}{\raisebox{0.2ex}{\scriptsize$\blacksquare$}}}
-\setbeamertemplate{enumerate items}[default]
 \setlength{\leftmargini}{1.1em}
 
 % ---------------------------------------------------------------------
@@ -161,6 +155,11 @@
     {\fontsize{19}{21}\selectfont\bfseries\color{#1}#2}\\[0.2em]
     {\scriptsize\color{muted}#3}
   \end{minipage}}
+
+% Short heading + one or two plain sentences.
+\newcommand{\point}[2]{%
+  {\small\bfseries\color{brand}#1\par}\vspace{0.1em}
+  {\footnotesize #2\par}}
 
 % Highlighted conclusion box at the bottom of a slide.
 \newcommand{\takeaway}[1]{%
@@ -193,14 +192,14 @@
       minimum height={0.5625*#2},font=\footnotesize,text=muted,align=center]{#3};%
   }}
 
-% Small labelled card for the "three gaps" slide.
-\newcommand{\gapcard}[4]{% {gap}{why it hurts}{our answer}{how}
+% Card for the "three challenges" slide.
+\newcommand{\gapcard}[4]{% {challenge}{why it hurts}{our idea}{how}
   \begin{beamercolorbox}[wd=\linewidth,sep=0.5em,rounded=true]{card}
-    {\small\bfseries\color{block}#1}\par\vspace{0.2em}
-    {\footnotesize #2}\par\vspace{0.2em}
+    {\small\bfseries\color{block}#1\par}\vspace{0.2em}
+    {\footnotesize #2\par}\vspace{0.2em}
     {\centering\color{brandmid}$\Downarrow$\par}\vspace{0.1em}
-    {\small\bfseries\color{brand}#3}\par\vspace{0.1em}
-    {\footnotesize #4}
+    {\small\bfseries\color{brand}#3\par}\vspace{0.1em}
+    {\footnotesize #4\par}
   \end{beamercolorbox}}
 
 % Speaker names (from report/contribution_report.tex)
@@ -208,10 +207,11 @@
 \newcommand{\sAkshin}{\az{Akşin Fətəliyev}}
 \newcommand{\sSebuhi}{\az{Səbuhi Nəzərov}}
 \newcommand{\sHabil}{\az{Habil Hüseynov}}
-\newcommand{\sAll}{All presenters}
+\newcommand{\sAll}{All members}
+\newcommand{\speaker}[1]{\par\vspace{-0.9em}\hfill{\scriptsize\color{muted}#1}\par\vspace{-0.2em}}
 
 \title{Real-Time Financial Fraud Detection}
-\subtitle{with Learned Hybrid Gating and Uncertainty-Aware Triage}
+\subtitle{Catching rare fraud with deep learning, and knowing when to ask a human}
 
 % =====================================================================
 \begin{document}
@@ -234,7 +234,7 @@
   \vspace{0.7em}
   {\fontsize{22}{26}\selectfont\bfseries\color{brand}\inserttitle}\par
   \vspace{0.3em}
-  {\Large\color{ink}\insertsubtitle}\par
+  {\large\color{ink}\insertsubtitle}\par
   \vspace{0.9em}
   {\color{brandmid}\rule{0.5\linewidth}{1.2pt}}\par
   \vspace{0.9em}
@@ -249,120 +249,177 @@
 }
 
 % =====================================================================
-\section{Motivation}
+\section{Why it matters}
 % =====================================================================
 
 % ---------------------------------------------------------------------
-% 2. Problem
+% 2. Why fraud detection is hard
 % ---------------------------------------------------------------------
 \speaker{\sNadir}
-\begin{frame}{Fraud is rare, drifting, and costly to get wrong}
+\begin{frame}{Why is fraud detection hard?}
   \vspace{0.2em}
   \begin{columns}[T]
     \column{0.31\textwidth}
-      \bignum{590,540}{e-commerce transactions\\(IEEE-CIS / Vesta benchmark)}
+      \bignum[block]{1 in 29}{online payments in our data\\is fraud (3.5\%)}
     \column{0.31\textwidth}
-      \bignum[block]{3.5\%}{are fraudulent (20,663):\\accuracy is meaningless}
+      \bignum[review]{96.5\%}{accuracy of a useless model\\that \emph{never} flags fraud}
     \column{0.31\textwidth}
-      \bignum[review]{<15 ms}{latency budget for an inline\\payment decision}
+      \bignum{3 choices}{for every payment: approve,\\block, or ask a human}
   \end{columns}
-  \vspace{0.8em}
-  \keyline{Our answer: \textbf{FT-CAT} reads card history ($K{=}5$)
-    \enspace\textperiodcentered\enspace \textbf{DAE} flags what legitimate traffic
-    never looks like \enspace\textperiodcentered\enspace \textbf{conformal triage}
-    decides approve / block / review \enspace\textperiodcentered\enspace shipped as
-    \textbf{FastAPI + Streamlit} on CPU.}
+  \vspace{1.1em}
+  \begin{columns}[T]
+    \column{0.31\textwidth}
+      \point{Fraud is rare}{Models see very few fraud examples to learn from.}
+    \column{0.31\textwidth}
+      \point{Fraud changes}{Criminals keep inventing tricks the model has never seen.}
+    \column{0.31\textwidth}
+      \point{Mistakes are costly}{Missed fraud loses money; false alarms annoy real customers.}
+  \end{columns}
   \vfill
-  \takeaway{Goal: an end-to-end product that scores transactions on a CPU and
-    \textbf{knows when it is unsure}, routing only uncertain cases to analysts.}
+  \takeaway{Our goal: a fast system that spots fraud \textbf{and knows when it is unsure},
+    so only the difficult cases go to a human analyst.}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 4. Data protocol
+% 3. Three challenges, three ideas
 % ---------------------------------------------------------------------
 \speaker{\sNadir}
-\begin{frame}{Evaluation respects time: no shuffling, no leakage}
-  \vspace{0.6em}
+\begin{frame}{Three challenges, three ideas}
+  \begin{columns}[T]
+    \column{0.31\textwidth}
+      \gapcard{1\enspace Single payments}
+        {Looking at one payment alone misses patterns, like many purchases in a few minutes.}
+        {Transformer with history}
+        {Looks at the payment \emph{and} at the card's last 5 payments.}
+    \column{0.31\textwidth}
+      \gapcard{2\enspace New fraud tricks}
+        {A model trained on past fraud can miss a trick it has never seen.}
+        {Autoencoder}
+        {Learns what \emph{normal} payments look like and flags anything unusual.}
+    \column{0.31\textwidth}
+      \gapcard{3\enspace No confidence}
+        {A score of 0.6 does not tell us whether we can trust it.}
+        {Confidence check}
+        {Acts automatically only when sure; otherwise asks a human.}
+  \end{columns}
+  \vfill
+  \keyline{A small \textbf{gate} combines the two detectors, and everything runs as a web
+    service with an analyst dashboard.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% 4. Data and time split
+% ---------------------------------------------------------------------
+\speaker{\sNadir}
+\begin{frame}{The data: real payments, split by time}
+  \vspace{0.1em}
+  \begin{columns}[T]
+    \column{0.31\textwidth}\midnum{590,540}{real online payments (IEEE-CIS / Vesta)}
+    \column{0.31\textwidth}\midnum{≈430}{details per payment: amount, card, email, device…}
+    \column{0.31\textwidth}\midnum[block]{20,663}{payments labelled as fraud}
+  \end{columns}
+  \vspace{0.5em}
   \centering
-  \begin{tikzpicture}[x=0.138cm,y=1cm,font=\footnotesize]
-    \def\h{0.95}
-    \fill[brand]     (0,0)    rectangle (63,\h);
-    \fill[brandmid]  (63,0)   rectangle (70,\h);
-    \fill[gatec]     (70,0)   rectangle (76,\h);
-    \fill[gatec!55]  (76,0)   rectangle (77.5,\h);
-    \fill[review]    (77.5,0) rectangle (85,\h);
-    \fill[ink]       (85,0)   rectangle (100,\h);
-    \foreach \x in {63,70,76,77.5,85} \draw[white,line width=0.8pt] (\x,0) -- (\x,\h);
-
-    \node[white,font=\small\bfseries] at (31.5,\h/2) {DAE + FT-CAT training\enspace 63\%};
-    \node[white,font=\scriptsize\bfseries,align=center] at (66.5,\h/2) {early\\stop 7\%};
-    \node[white,font=\scriptsize\bfseries,align=center] at (73,\h/2) {gate\\6\%};
-    \node[ink,font=\scriptsize\bfseries,align=center] at (81.25,\h/2) {calib.\\7.5\%};
-    \node[white,font=\scriptsize\bfseries,align=center] at (92.5,\h/2) {test 15\%\\88,581 tx};
-
-    \draw[decorate,decoration={brace,amplitude=5pt},muted,thick]
-      (0.3,\h+0.12) -- (69.7,\h+0.12)
-      node[midway,above=6pt,ink,align=center,font=\scriptsize] {original train block\\70\%};
-    \draw[decorate,decoration={brace,amplitude=5pt},muted,thick]
-      (70.3,\h+0.12) -- (84.7,\h+0.12)
-      node[midway,above=6pt,ink,align=center,font=\scriptsize] {validation\\15\%};
-    \draw[decorate,decoration={brace,amplitude=5pt},muted,thick]
-      (85.3,\h+0.12) -- (99.7,\h+0.12)
-      node[midway,above=6pt,ink,align=center,font=\scriptsize] {out-of-time test\\15\%};
-
-    \draw[muted,-{Stealth[length=2mm]}] (76.75,-0.5) -- (76.75,-0.05);
-    \node[muted,font=\scriptsize,anchor=north] at (76.75,-0.47) {gate early stop 1.5\%};
-    \draw[muted,-{Stealth[length=2.4mm]},thick] (0,-1.05) -- (100,-1.05)
-      node[pos=0.0,below=1pt,anchor=north west,font=\scriptsize] {time (TransactionDT) $\rightarrow$};
+  \begin{tikzpicture}[x=0.138cm,y=1cm]
+    \def\h{0.9}
+    \fill[brand]  (0,0)  rectangle (70,\h);
+    \fill[review] (70,0) rectangle (85,\h);
+    \fill[ink]    (85,0) rectangle (100,\h);
+    \draw[white,line width=1pt] (70,0) -- (70,\h) (85,0) -- (85,\h);
+    \node[white,font=\small\bfseries] at (35,\h/2) {1\enspace Learn\enspace 70\%};
+    \node[ink,font=\small\bfseries,align=center] at (77.5,\h/2) {2\enspace Tune\\15\%};
+    \node[white,font=\small\bfseries,align=center] at (92.5,\h/2) {3\enspace Test\\15\%};
+    \draw[muted,-{Stealth[length=2.4mm]},thick] (0,-0.25) -- (100,-0.25);
+    \node[font=\scriptsize,text=muted,anchor=north west] at (0,-0.3) {older payments};
+    \node[font=\scriptsize,text=muted,anchor=north east] at (100,-0.3) {newer payments};
   \end{tikzpicture}
   \vspace{0.3em}
   \raggedright
   \begin{columns}[T]
     \column{0.31\textwidth}
-      \small\textbf{\color{brand}Strictly chronological}\par
-      \footnotesize 70 / 15 / 15 by timestamp; equal timestamps stay together.
+      \point{1\enspace Learn}{The two detectors learn from the oldest 70\% of payments.}
     \column{0.31\textwidth}
-      \small\textbf{\color{brand}Fit on the past only}\par
-      \footnotesize Scalers and vocabularies fit on the train block; history uses
-      only earlier transactions.
+      \point{2\enspace Tune}{The next 15\% trains the gate and sets the cut-off.}
     \column{0.31\textwidth}
-      \small\textbf{\color{brand}Every label used once}\par
-      \footnotesize Model fit $\rightarrow$ gate fit $\rightarrow$ conformal calibration
-      $\rightarrow$ test.
+      \point{3\enspace Test}{The newest 15\% (88,581 payments) is kept for the end.}
   \end{columns}
+  \vfill
+  \keyline{Like studying old exams, then sitting a new one: the models never see the future.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% 5. How we measure success
+% ---------------------------------------------------------------------
+\speaker{\sNadir}
+\begin{frame}{How do we measure success?}
+  \vspace{0.2em}
+  \begin{columns}[T]
+    \column{0.31\textwidth}
+      \begin{beamercolorbox}[wd=\linewidth,sep=0.5em,rounded=true]{card}
+        \point{Accuracy can fool us}{Saying ``normal'' for every payment is 96.5\% accurate,
+          but catches no fraud at all.}
+      \end{beamercolorbox}
+    \column{0.31\textwidth}
+      \begin{beamercolorbox}[wd=\linewidth,sep=0.5em,rounded=true]{card}
+        \point{Precision}{Of the payments we flag, how many are \emph{really} fraud?}
+      \end{beamercolorbox}
+    \column{0.31\textwidth}
+      \begin{beamercolorbox}[wd=\linewidth,sep=0.5em,rounded=true]{card}
+        \point{Recall}{Of all the real fraud, how much did we \emph{catch}?}
+      \end{beamercolorbox}
+  \end{columns}
+  \vspace{1.0em}
+  \centering
+  {\small\textbf{\color{brand}PR-AUC} combines precision and recall into one score from 0 to 1}\par
+  \vspace{1.5em}
+  \begin{tikzpicture}[x=12cm,y=1cm]
+    \fill[brandlight] (0,0) rectangle (1,0.4);
+    \fill[brandmid!55] (0.33,0) rectangle (0.52,0.4);
+    \draw[muted] (0,0) rectangle (1,0.4);
+    \foreach \v in {0,0.25,0.5,0.75,1} \node[below,font=\scriptsize,text=muted] at (\v,0) {\v};
+    \draw[block,line width=1.6pt] (0.035,-0.08) -- (0.035,0.55);
+    \node[anchor=south west,font=\scriptsize\bfseries,text=block] at (0,0.58) {random guessing ≈ 0.035};
+    \node[anchor=south,font=\scriptsize\bfseries,text=brand] at (0.425,0.58) {our models ≈ 0.33--0.52};
+    \draw[approve,line width=1.6pt] (1,-0.08) -- (1,0.55);
+    \node[anchor=south east,font=\scriptsize\bfseries,text=approve] at (1,0.58) {perfect = 1};
+  \end{tikzpicture}
+  \vfill
+  \raggedright
+  \keyline{We also report how much fraud is caught when only 1 in 100 normal payments
+    is wrongly flagged.}
 \end{frame}
 
 % =====================================================================
-\section{Method}
+\section{How it works}
 % =====================================================================
 
 % ---------------------------------------------------------------------
-% 5. System architecture
+% 6. System in one picture
 % ---------------------------------------------------------------------
-\speaker{\sAkshin}
-\begin{frame}{Two detectors, one learned fusion, one policy}
-  \vspace{0.5em}
+\speaker{\sSebuhi}
+\begin{frame}{Our system in one picture}
+  \vspace{0.4em}
   \centering
   \resizebox{\linewidth}{!}{%
   \begin{tikzpicture}[font=\footnotesize]
-    \node[box=muted,text width=1.9cm,minimum height=4.3cm] (in) at (0,0)
-      {\textbf{Transaction}\\[5pt]431 tabular features\\[5pt]+ last $K{=}5$ card events};
+    \node[box=muted,text width=2.0cm,minimum height=4.3cm] (in) at (0,0)
+      {\textbf{A new payment}\\[5pt]amount, card, email, device…\\[5pt]+ the card's last 5 payments};
 
-    \node[box=brandmid,text width=3.7cm] (dae) at (3.55,1.55)
-      {\textbf{Denoising autoencoder}\\trained on legit only\\$\rightarrow$ anomaly score $S$};
-    \node[box=brand,text width=3.7cm] (ft) at (3.55,0)
-      {\textbf{FT-CAT Transformer}\\supervised, focal loss\\$\rightarrow$ probability $P_{\mathrm{FT}}$};
-    \node[box=muted,text width=3.7cm] (hist) at (3.55,-1.45)
-      {causal history statistics\\$D_{\mathrm{hist}}$, $A_{\mathrm{hist}}$};
+    \node[box=brandmid,text width=3.7cm] (dae) at (3.65,1.55)
+      {\textbf{Autoencoder}\\``Does this look normal?''};
+    \node[box=brand,text width=3.7cm] (ft) at (3.65,0)
+      {\textbf{Transformer}\\``Does this look like past fraud?''};
+    \node[box=muted,text width=3.7cm] (hist) at (3.65,-1.45)
+      {\textbf{Card history}\\``How active is this card?''};
 
-    \node[box=gatec,text width=2.3cm,minimum height=2.3cm] (gate) at (7.4,0)
-      {\textbf{Learned gate}\\[3pt]MLP 4$\rightarrow$16$\rightarrow$8$\rightarrow$1\\[3pt]$\rightarrow P_{\mathrm{gate}}$};
-    \node[box=review,text width=2.3cm,minimum height=2.3cm] (cp) at (10.6,0)
-      {\textbf{Split conformal}\\[3pt]$\alpha = 0.01$\\[3pt]set $\Gamma_\alpha(x)$};
+    \node[box=gatec,text width=2.4cm,minimum height=2.3cm] (gate) at (7.55,0)
+      {\textbf{Gate}\\[3pt]``Whom should we trust?''\\[3pt]$\rightarrow$ fraud score};
+    \node[box=review,text width=2.4cm,minimum height=2.3cm] (cp) at (10.8,0)
+      {\textbf{Confidence check}\\[3pt]``Are we sure enough to act?''};
 
-    \node[pill=approve] (ap) at (13.55,0.85) {Auto-approve};
-    \node[pill=review]  (rv) at (13.55,0)    {Human review};
-    \node[pill=block]   (bl) at (13.55,-0.85) {Auto-block};
+    \node[pill=approve] (ap) at (13.75,0.85) {Auto-approve};
+    \node[pill=review]  (rv) at (13.75,0)    {Human review};
+    \node[pill=block]   (bl) at (13.75,-0.85) {Auto-block};
 
     \draw[arr] (in.east |- dae.west) -- (dae.west);
     \draw[arr] (in.east |- ft.west) -- (ft.west);
@@ -376,559 +433,414 @@
     \draw[arr] (cp.east) -- ++(0.18,0) |- (bl.west);
 
     \node[draw=muted,dashed,rounded corners=4pt,fit=(gate)(cp)(ap)(bl),inner sep=6pt,
-      label={[font=\scriptsize,text=muted]below:served on CPU\enspace\textperiodcentered\enspace FastAPI\enspace\textperiodcentered\enspace Streamlit\enspace\textperiodcentered\enspace EXIR + ONNX}] {};
+      label={[font=\scriptsize,text=muted]below:runs on a normal CPU\enspace\textperiodcentered\enspace web API\enspace\textperiodcentered\enspace analyst dashboard}] {};
   \end{tikzpicture}}
   \vfill
-  \takeaway{The supervised branch knows \emph{past fraud}; the autoencoder knows
-    \emph{normal behaviour}. The gate learns how much to trust each; conformal
-    prediction decides whether to act.}
+  \takeaway{Think of two detectives with different skills: one knows \emph{normal} behaviour,
+    the other knows \emph{past fraud}. The gate weighs their opinions, and the confidence
+    check decides whether to act or ask a human.}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 6. FT-CAT
+% 7. Transformer
 % ---------------------------------------------------------------------
-\begin{frame}{FT-CAT: feature tokens that look back in time}
-  \vspace{0.5em}
-  \begin{columns}[c]
-    \column{0.60\textwidth}
-      \centering
-      \resizebox{\linewidth}{!}{%
-      \begin{tikzpicture}[font=\footnotesize]
-        % token column
-        \node[tok,fill=ink] (cls) at (0,1.35) {};
-        \foreach \y in {0.95,0.63,0.31} \node[tok,fill=brandmid] at (0,\y) {};
-        \node at (0,0.02) {$\vdots$};
-        \foreach \y in {-0.4,-0.72,-1.04} \node[tok,fill=gatec] at (0,\y) {};
-        \node[anchor=east,font=\scriptsize] at (-0.3,1.35) {[CLS]};
-        \node[anchor=east,font=\scriptsize,align=right] at (-0.3,0.63) {100 numeric\\$e_j = x_j w_j + b_j$};
-        \node[anchor=east,font=\scriptsize,align=right] at (-0.3,-0.72) {31 categorical\\embeddings};
-        \node[font=\scriptsize\bfseries,brand] at (0,-1.55) {132 tokens};
+\speaker{\sAkshin}
+\begin{frame}{The Transformer: reading a payment like a sentence}
+  \vspace{0.2em}
+  \centering
+  \begin{tikzpicture}[font=\footnotesize]
+    \node[detail] (d1) at (0, 1.05) {amount};
+    \node[detail] (d2) at (0, 0.5)  {card type};
+    \node[detail] (d3) at (0,-0.05) {email domain};
+    \node[detail] (d4) at (0,-0.6)  {device};
+    \node[font=\footnotesize] at (0,-1.0) {$\vdots$};
+    \node[font=\scriptsize\bfseries,text=brand] at (0,-1.45) {132 details in total};
 
-        \node[blk=brand,text width=1.75cm,minimum height=2.9cm] (enc) at (2.35,0.15)
-          {\textbf{Self-attention}\\encoder\\$\times 2$\\[3pt]$d{=}32$\\4 heads};
-        \node[blk=review,text width=1.95cm,minimum height=2.9cm] (xat) at (5.0,0.15)
-          {\textbf{Temporal\\cross-attention}\\[3pt]$Q$: feature tokens\\$K,V$: history};
-        \node[blk=brand,text width=1.35cm,minimum height=2.9cm] (head) at (7.35,0.15)
-          {[CLS]\\$\downarrow$\\LayerNorm\\+ linear\\$\downarrow$\\$P_{\mathrm{FT}}$};
+    \node[blk=brand,text width=2.4cm,minimum height=2.6cm] (att) at (3.25,0.1)
+      {\textbf{Attention}\\[4pt]details look at\\each other};
+    \node[blk=review,text width=2.6cm,minimum height=2.6cm] (hat) at (6.7,0.1)
+      {\textbf{History attention}\\[4pt]details look at the\\card's past payments};
+    \node[blk=brand,text width=1.9cm,minimum height=2.6cm] (out) at (9.9,0.1)
+      {\textbf{Fraud\\probability}\\[4pt]0--100\%};
 
-        % history slots
-        \foreach \k in {1,...,5} {
-          \node[tok,minimum width=7mm,minimum height=5mm,fill=review!70] at ({3.9+(\k-1)*0.55},-2.3) {};
-          \node[font=\scriptsize] at ({3.9+(\k-1)*0.55},-2.3) {$t{-}\k$};
-        }
-        \node[font=\scriptsize,align=center,text=ink] at (5.0,-3.0)
-          {last 5 transactions of the same card\\(amount, D-deltas: 10 features each)};
+    \foreach \k in {1,...,5} \node[past] at ({5.6+(\k-1)*0.55},-1.95) {\k};
+    \node[font=\scriptsize,text=ink] at (6.7,-2.45) {the card's last 5 payments};
 
-        \draw[arr] (0.35,0.15) -- (enc.west);
-        \draw[arr] (enc.east) -- (xat.west);
-        \draw[arr] (xat.east) -- (head.west);
-        \draw[arr] (5.0,-2.0) -- (xat.south);
-      \end{tikzpicture}}
-    \column{0.37\textwidth}
-      \small
-      \textbf{\color{brand}Why tokens?}\par
-      \footnotesize Each feature gets its own embedding, so attention can model
-      feature interactions and each token can query history.\par
-      \vspace{0.6em}
-      \small\textbf{\color{brand}Imbalance-aware loss}\par
-      \vspace{0.2em}
-      \footnotesize
-      $\mathcal{L}_{\text{focal}} = -\,\alpha_t\,(1-p_t)^{\gamma}\,\log p_t$\par
-      \vspace{0.2em}
-      down-weights easy legitimate cases ($\gamma{=}2.0$, $\alpha{=}0.25$ in config).\par
-      \vspace{0.6em}
-      \small\textbf{\color{brand}Small by design}\par
-      \footnotesize 94,305 parameters; padded history slots are masked.
-      Ablation arms: self-attention only, flat MLP.
+    \draw[arr] (1.15,0.1) -- (att.west);
+    \draw[arr] (att.east) -- (hat.west);
+    \draw[arr] (hat.east) -- (out.west);
+    \draw[arr] (6.7,-1.68) -- (hat.south);
+  \end{tikzpicture}
+  \vspace{0.3em}
+  \raggedright
+  \begin{columns}[T]
+    \column{0.31\textwidth}
+      \point{Like words in a sentence}{Each detail becomes a token, the way a language model
+        splits text into words.}
+    \column{0.31\textwidth}
+      \point{Attention}{The model learns which details matter together, and which past
+        payments matter for this one.}
+    \column{0.31\textwidth}
+      \point{Learning from rare fraud}{Focal loss makes rare, hard fraud examples count more.
+        Size: 94k parameters.}
   \end{columns}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 7. DAE
+% 8. Autoencoder
 % ---------------------------------------------------------------------
 \speaker{\sSebuhi}
-\begin{frame}{The DAE learns what legitimate traffic looks like}
-  \vspace{0.5em}
+\begin{frame}{The autoencoder: learning what ``normal'' looks like}
+  \vspace{0.4em}
   \begin{columns}[c]
-    \column{0.58\textwidth}
+    \column{0.55\textwidth}
       \centering
       \resizebox{\linewidth}{!}{%
       \begin{tikzpicture}[font=\footnotesize]
-        \foreach \x/\hh/\lab/\col in {0/3.0/800/muted,1.3/2.1/256/brandmid,2.6/1.5/128/brandmid,3.9/0.7/32/brand,
-                                      5.2/1.5/128/brandmid,6.5/2.1/256/brandmid,7.8/3.0/800/muted} {
+        \foreach \x/\hh/\col in {0/3.0/muted,1.3/2.1/brandmid,2.6/1.5/brandmid,3.9/0.7/brand,
+                                 5.2/1.5/brandmid,6.5/2.1/brandmid,7.8/3.0/muted}
           \fill[\col,rounded corners=2pt] ({\x-0.28},{-\hh/2}) rectangle ({\x+0.28},{\hh/2});
-          \node[font=\scriptsize\bfseries] at (\x,{-\hh/2-0.25}) {\lab};
-        }
         \foreach \a/\b in {0/1.3,1.3/2.6,2.6/3.9,3.9/5.2,5.2/6.5,6.5/7.8}
           \draw[arr,line width=0.8pt] ({\a+0.33},0) -- ({\b-0.33},0);
-        \node[font=\scriptsize\bfseries,brand] at (3.9,0.75) {latent $z$};
-        \node[align=center,font=\scriptsize] at (0,1.95) {$\tilde{x}$ = $x$ + noise\\+ feature dropout};
-        \node[align=center,font=\scriptsize] at (7.8,1.95) {reconstruction\\$\hat{x}$};
-        \draw[decorate,decoration={brace,amplitude=4pt,mirror},muted] (-0.3,-2.05) -- (3.3,-2.05)
-          node[midway,below=4pt,font=\scriptsize,ink] {encoder};
-        \draw[decorate,decoration={brace,amplitude=4pt,mirror},muted] (4.5,-2.05) -- (8.1,-2.05)
-          node[midway,below=4pt,font=\scriptsize,ink] {decoder};
+        \node[align=center,font=\scriptsize\bfseries] at (0,2.0) {payment\\(800 numbers)};
+        \node[align=center,font=\scriptsize\bfseries,text=brand] at (3.9,1.0) {squeezed to\\32 numbers};
+        \node[align=center,font=\scriptsize\bfseries] at (7.8,2.0) {rebuilt\\payment};
+        \draw[decorate,decoration={brace,amplitude=4pt,mirror},muted] (-0.3,-1.75) -- (3.3,-1.75)
+          node[midway,below=4pt,font=\scriptsize,text=ink] {compress};
+        \draw[decorate,decoration={brace,amplitude=4pt,mirror},muted] (4.5,-1.75) -- (8.1,-1.75)
+          node[midway,below=4pt,font=\scriptsize,text=ink] {rebuild};
       \end{tikzpicture}}
       \vspace{0.6em}
-      \begin{beamercolorbox}[wd=\linewidth,sep=0.4em,rounded=true]{takeaway}
+      \begin{beamercolorbox}[wd=\linewidth,sep=0.45em,rounded=true]{takeaway}
         \centering\small
-        $S_{\mathrm{anomaly}}(x) = \sum_j (x_j-\hat{x}_j)^2 + \gamma_1 \sum_j |x_j-\hat{x}_j|$
+        \textbf{Anomaly score} = how different the rebuilt payment is from the original
       \end{beamercolorbox}
-    \column{0.39\textwidth}
-      \small\textbf{\color{brand}Input}\par
-      \footnotesize 800-d vector: 400 scaled numeric features + 400 missingness flags.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Training}\par
-      \footnotesize Legitimate transactions only ($y{=}0$), with Gaussian noise ($\sigma{=}0.1$)
-      and 10\% feature dropout, so it learns structure instead of copying.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Output}\par
-      \footnotesize Residual score with $\gamma_1{=}0.4$, normalised by its 99.9th
-      training percentile; the $L_1$ term keeps a few large residuals from dominating.\par
-      \vspace{0.55em}
-      \footnotesize\color{muted}485,440 parameters\enspace\textperiodcentered\enspace 1.95 MB
+    \column{0.42\textwidth}
+      \point{Trained only on normal payments}{It practises squeezing normal payments into
+        32 numbers and rebuilding them.}
+      \vspace{0.5em}
+      {\footnotesize\textcolor{approve}{\textbf{Normal}} $\rightarrow$ rebuilt well
+        $\rightarrow$ low score\par}
+      \vspace{0.25em}
+      {\footnotesize\textcolor{block}{\textbf{Unusual}} $\rightarrow$ rebuilt badly
+        $\rightarrow$ high score\par}
+      \vspace{0.6em}
+      \point{Why ``denoising''?}{We add a little random noise during training, so it learns
+        real patterns instead of simply copying.}
+      \vspace{0.5em}
+      \point{Why is it useful?}{It can flag new fraud tricks that nobody has labelled yet.}
   \end{columns}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 8. Learned gate
+% 9. Gate
 % ---------------------------------------------------------------------
 \speaker{\sHabil}
-\begin{frame}{A tiny learned gate fuses four signals}
+\begin{frame}{The gate: deciding which signal to trust}
   \vspace{0.5em}
   \begin{columns}[c]
     \column{0.57\textwidth}
       \centering
       \resizebox{\linewidth}{!}{%
       \begin{tikzpicture}[font=\footnotesize]
-        \node[inp=brandmid] (i1) at (0, 1.65) {$\tilde{S}_{\mathrm{anomaly}}$\enspace{\scriptsize DAE score}};
-        \node[inp=brand]    (i2) at (0, 0.55) {$P_{\mathrm{FT}}$\enspace{\scriptsize FT-CAT probability}};
-        \node[inp=muted]    (i3) at (0,-0.55) {$D_{\mathrm{hist}}$\enspace{\scriptsize history density}};
-        \node[inp=muted]    (i4) at (0,-1.65) {$A_{\mathrm{hist}}$\enspace{\scriptsize history amount}};
+        \node[inp=brandmid] (i1) at (0, 1.65) {How unusual is it?\\{\scriptsize\color{muted}from the autoencoder}};
+        \node[inp=brand]    (i2) at (0, 0.55) {How fraud-like is it?\\{\scriptsize\color{muted}from the Transformer}};
+        \node[inp=muted]    (i3) at (0,-0.55) {How active is the card?\\{\scriptsize\color{muted}from its recent history}};
+        \node[inp=muted]    (i4) at (0,-1.65) {How big are its amounts?\\{\scriptsize\color{muted}from its recent history}};
 
-        \foreach \j/\y in {1/1.9,2/1.3,3/0.7,4/-0.7,5/-1.3,6/-1.9} \node[neuron] (a\j) at (3.1,\y) {};
-        \node at (3.1,0.05) {$\vdots$};
-        \foreach \j/\y in {1/1.2,2/0.45,3/-0.45,4/-1.2} \node[neuron] (b\j) at (4.5,\y) {};
-        \node[neuron=review] (o) at (5.8,0) {};
+        \foreach \j/\y in {1/1.9,2/1.3,3/0.7,4/-0.7,5/-1.3,6/-1.9} \node[neuron] (a\j) at (3.8,\y) {};
+        \node at (3.8,0.05) {$\vdots$};
+        \foreach \j/\y in {1/1.2,2/0.45,3/-0.45,4/-1.2} \node[neuron] (b\j) at (5.2,\y) {};
+        \node[neuron=review] (o) at (6.5,0) {};
 
         \foreach \i in {1,...,4} \foreach \j in {1,...,6} \draw[muted!60,line width=0.3pt] (i\i.east) -- (a\j);
         \foreach \i in {1,...,6} \foreach \j in {1,...,4} \draw[muted!60,line width=0.3pt] (a\i) -- (b\j);
         \foreach \j in {1,...,4} \draw[muted!60,line width=0.3pt] (b\j) -- (o);
 
-        \node[font=\scriptsize\bfseries] at (3.1,-2.45) {16 ReLU};
-        \node[font=\scriptsize\bfseries] at (4.5,-2.45) {8 ReLU};
-        \node[font=\scriptsize\bfseries] at (5.8,-2.45) {sigmoid};
-        \draw[-{Stealth[length=2.2mm]},line width=1pt,muted] (o.east) -- ++(0.55,0)
-          node[right,ink,font=\small] {$P_{\mathrm{gate}}$};
+        \node[font=\scriptsize\bfseries] at (4.5,-2.45) {small network: 16 + 8 neurons};
+        \draw[-{Stealth[length=2.2mm]},line width=1pt,muted] (o.east) -- ++(0.5,0)
+          node[right,text=ink,font=\small\bfseries,align=left] {final\\fraud score};
       \end{tikzpicture}}
     \column{0.40\textwidth}
-      \small\textbf{\color{brand}Why learn the fusion?}\par
-      \footnotesize A fixed blend $\alpha S + (1-\alpha)P_{\mathrm{FT}}$ uses one mixture for
-      every transaction; the gate adapts it to each case.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Leakage-safe}\par
-      \footnotesize Fit on the validation period (6\% train, 1.5\% early stop),
-      never on DAE or FT-CAT training rows.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Cheap}\par
-      \footnotesize 225 parameters\enspace\textperiodcentered\enspace 0.12 ms median at batch 1.\par
-      \vspace{0.55em}
-      \scriptsize\color{muted}Caveat: the gate also sees history features, so its gains
-      are not due to fusion alone.
+      \point{Why not a fixed 50/50 mix?}{A fixed mix treats every payment the same way.
+        A learned gate can weigh the signals differently in different situations.}
+      \vspace{0.6em}
+      \point{No cheating}{It is trained on a later time period than the two detectors,
+        so it never sees their training data.}
+      \vspace{0.6em}
+      \point{Tiny and fast}{Only 225 parameters, and about 0.12 ms per payment.}
   \end{columns}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 9. Conformal triage
+% 10. Confidence check (conformal prediction)
 % ---------------------------------------------------------------------
-\begin{frame}{Conformal prediction turns scores into actions}
-  \vspace{0.3em}
+\speaker{\sHabil}
+\begin{frame}{The confidence check: act only when we are sure}
+  \vspace{0.2em}
   \begin{columns}[c]
-    \column{0.37\textwidth}
-      \small
-      \textbf{\color{brand}1\enspace Calibrate}\par
-      \footnotesize On 44,291 held-out transactions:\par
-      $s_i = 1-\hat{P}(y_i\mid x_i)$\par
-      \vspace{0.5em}
-      \small\textbf{\color{brand}2\enspace Threshold}\par
-      \footnotesize $q$ = $\lceil (n{+}1)(1{-}\alpha)\rceil$-th smallest $s_i$\par
-      $\alpha = 0.01 \;\Rightarrow\; q = 0.975$\par
-      \vspace{0.5em}
-      \small\textbf{\color{brand}3\enspace Predict a set}\par
-      \footnotesize $\Gamma_\alpha(x) = \{\,y : 1-\hat{P}(y\mid x) \le q\,\}$\par
+    \column{0.36\textwidth}
+      \point{1\enspace Hold out fresh payments}{44,291 payments the models never learned from.}
+      \vspace{0.45em}
+      \point{2\enspace Measure the mistakes}{Check how wrong the fraud score can be on them.}
+      \vspace{0.45em}
+      \point{3\enspace Set a safety cut-off}{Chosen so the right answer is covered 99\% of
+        the time.}
       \vspace{0.6em}
-      \renewcommand{\arraystretch}{1.25}
-      \begin{tabular}{@{}l@{\enspace}l@{}}
-        $\{0\}$ & \chip{approve}{Auto-approve} \\
-        $\{1\}$ & \chip{block}{Auto-block} \\
-        $\{0,1\}$ or $\varnothing$ & \chip{review}{Human review} \\
-      \end{tabular}\par
+      {\footnotesize Sure it is normal\hfill\chip{approve}{Auto-approve}\par}
+      \vspace{0.25em}
+      {\footnotesize Sure it is fraud\hfill\chip{block}{Auto-block}\par}
+      \vspace{0.25em}
+      {\footnotesize Not sure\hfill\chip{review}{Human review}\par}
       \vspace{0.5em}
-      \scriptsize\color{muted}Guarantee $P(y \in \Gamma_\alpha) \ge 1-\alpha$ holds under
-      exchangeability; time drift weakens it.
-    \column{0.61\textwidth}
+      {\scriptsize\color{muted}This method is called \emph{conformal prediction}.\par}
+    \column{0.62\textwidth}
       \centering
       \includegraphics[width=\linewidth]{score_bands.pdf}
-      \source{Learned-gate probabilities on the 88,581-transaction out-of-time test set.}
+      \source{Most normal payments get a very low fraud score.}
   \end{columns}
 \end{frame}
 
 % =====================================================================
-\section{Experiments \& Results}
+\section{Results}
 % =====================================================================
 
 % ---------------------------------------------------------------------
-% 10. Baselines
+% 11. Classic baselines
 % ---------------------------------------------------------------------
 \speaker{\sNadir}
-\begin{frame}{Gradient-boosted trees set a high bar}
-  \vspace{0.4em}
+\begin{frame}{Classic models set a strong benchmark}
+  \vspace{0.3em}
   \begin{columns}[c]
-    \column{0.60\textwidth}
+    \column{0.58\textwidth}
       \centering
       \includegraphics[width=\linewidth]{baselines.pdf}
-    \column{0.37\textwidth}
-      \small\textbf{\color{brand}Setup}\par
-      \footnotesize Trained on the upstream-training block (413,378 tx, 431 features),
-      scored on chronological dev-validation.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Why PR-AUC?}\par
-      \footnotesize At 3.5\% fraud, ROC-AUC flatters every model; PR-AUC shows alert quality.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Engineering note}\par
-      \footnotesize Random Forest capped at depth 16: 550 MB $\rightarrow$ 57 MB,
-      full split scored in 0.3 s.
+      \source{Measured on the tuning period (88,581 payments).}
+    \column{0.39\textwidth}
+      \point{Logistic regression}{A simple weighted sum of the payment details.}
+      \vspace{0.5em}
+      \point{Random forest}{200 decision trees that vote together.}
+      \vspace{0.5em}
+      \point{LightGBM}{Trees built one after another, each fixing the previous
+        one's mistakes.}
   \end{columns}
   \vfill
-  \keyline{\textbf{LightGBM reaches 0.521 PR-AUC.} Deep models must beat it, or add what
-    trees cannot: anomaly signals and calibrated triage.}
+  \keyline{\textbf{LightGBM scores 0.521.} Tree models are very strong on table-like data,
+    so our deep models must bring something extra.}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 11. FT-CAT test + gate robustness
+% 12. Transformer results
 % ---------------------------------------------------------------------
-\speaker{\sNadir}
-\begin{frame}{Out-of-time testing is harder than development}
+\speaker{\sAkshin}
+\begin{frame}{Transformer results on future payments}
   \vspace{0.6em}
   \begin{columns}[T]
     \column{0.56\textwidth}
-      \small\textbf{\color{brand}FT-CAT on the final 15\% (88,581 transactions)}\par
-      \vspace{1.0em}
       \begin{columns}[T]
-        \column{0.33\linewidth}\bignum{0.341}{PR-AUC}
-        \column{0.33\linewidth}\bignum{0.814}{ROC-AUC}
-        \column{0.33\linewidth}\bignum{0.271}{TPR at\\1\% FPR}
+        \column{0.48\linewidth}\bignum{0.341}{PR-AUC on the test period\\(about 10$\times$ random guessing)}
+        \column{0.48\linewidth}\bignum{27\%}{of fraud caught when only\\1\% of normal payments are flagged}
       \end{columns}
-      \vspace{1.3em}
-      \footnotesize
-      Development-validation PR-AUC in the architecture ablation averaged
-      \textbf{0.44}; the later test period drops to \textbf{0.341}.\par
-      \vspace{0.4em}
-      Fraud behaviour drifts, so a shuffled split would have overstated performance.
+      \vspace{1.4em}
+      \point{Fraud changes over time}{During development the score was 0.44; on the newer
+        test payments it fell to 0.34. That is why we always test on the future.}
     \column{0.40\textwidth}
-      \small\textbf{\color{brand}Learned gate: stable across seeds}\par
-      \vspace{0.3em}
+      \point{Is the gate stable?}{We trained it 3 times with different random starts:}
       \centering
       \includegraphics[width=\linewidth]{gate_seeds.pdf}
-      \raggedright
-      \source{Development-validation; sample SD, $n{=}3$; no significance test.
-        Production checkpoint uses the pre-set seed 42.}
+      \source{Measured on the tuning period.}
   \end{columns}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 12. Architecture ablation
+% 13. Ablation
 % ---------------------------------------------------------------------
 \speaker{\sAkshin}
-\begin{frame}{Ablation: attention did not beat a flat MLP}
-  \vspace{0.3em}
+\begin{frame}{Did attention help? An honest experiment}
+  \vspace{0.2em}
   \begin{columns}[c]
     \column{0.58\textwidth}
       \centering
       \includegraphics[width=\linewidth]{ablation.pdf}
     \column{0.39\textwidth}
-      \small\textbf{\color{brand}Protocol}\par
-      \footnotesize Same inputs and training loop, 3 seeds, 30-epoch cap with early
-      stopping, 80k-row subsample.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Result}\par
-      \footnotesize Flat MLP \textbf{0.370} $>$ FT-CAT \textbf{0.338} $\approx$
-      self-attention only \textbf{0.338}.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Caveat}\par
-      \footnotesize The MLP has 2.3$\times$ the parameters and capacity was not tuned per arm.
+      \point{What we did}{Trained three versions on the same data with the same settings,
+        three times each.}
+      \vspace{0.5em}
+      \point{What we found}{The simple network scored best (0.370); both Transformers
+        scored about 0.338.}
+      \vspace{0.5em}
+      \point{Fair warning}{The simple network had more than twice as many parameters.}
   \end{columns}
   \vfill
-  \keyline{\small Reported, not hidden: FT-CAT's extra complexity is \textbf{not yet justified}
-    by test PR-AUC. Attention diagnostics agree: history attention is nearly uniform
-    (fraud vs legitimate differ by at most 0.04), so the layer mostly averages.}
+  \keyline{Fancier is not automatically better: complex models have to prove they are worth it.}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 14. Focal loss sweep
+% 14. Attention heatmap
 % ---------------------------------------------------------------------
-\begin{frame}{Focal loss: RetinaNet defaults are not best here}
-  \vspace{0.2em}
-  \centering
-  \includegraphics[width=0.74\linewidth]{focal.pdf}
-  \raggedright
-  \vspace{0.25em}
-  \begin{columns}[T]
-    \column{0.31\textwidth}
-      \small\textbf{\color{brand}Selected by validation}\par
-      \footnotesize $\gamma{=}0.5$, $\alpha{=}0.5$ wins; the default $\gamma{=}2$, $\alpha{=}0.25$ does not.
-    \column{0.31\textwidth}
-      \small\textbf{\color{brand}Heavy focusing hurts}\par
-      \footnotesize $\gamma{=}5$, $\alpha{=}0.1$ collapses to 0.222 test PR-AUC.
-    \column{0.31\textwidth}
-      \small\textbf{\color{brand}Honest scale}\par
-      \footnotesize Mild settings sit within about $\pm$0.01 of weighted BCE
-      (1 seed, 8 epochs).
-  \end{columns}
-\end{frame}
-
-% ---------------------------------------------------------------------
-% 15. Conformal results
-% ---------------------------------------------------------------------
-\speaker{\sHabil}
-\begin{frame}{98.99\% coverage with 23\% of traffic reviewed}
+\speaker{\sAkshin}
+\begin{frame}{Looking inside: where does attention look?}
   \vspace{0.1em}
-  \begin{columns}[T]
-    \column{0.24\textwidth}\midnum{98.99\%}{coverage (target 99\%)}
-    \column{0.24\textwidth}\midnum[approve]{76.8\%}{auto-approved}
-    \column{0.24\textwidth}\midnum[review]{23.2\%}{sent to human review}
-    \column{0.24\textwidth}\midnum[fraudc]{70.9\%}{of fraud reaches review}
-  \end{columns}
-  \vspace{0.3em}
   \centering
-  \includegraphics[height=3.5cm]{triage_sweep.pdf}
+  \includegraphics[width=0.72\linewidth]{attention.pdf}
   \raggedright
-  \keyline{95\% CI 98.92--99.06\enspace\textperiodcentered\enspace \textbf{no auto-blocks} at
-    $\alpha{=}0.01$\enspace\textperiodcentered\enspace fraud-class coverage 70.9\% vs legitimate
-    100\%\enspace\textperiodcentered\enspace review precision 10.6\% $\approx$ 3$\times$ base rate}
+  \vspace{0.3em}
+  \begin{columns}[T]
+    \column{0.31\textwidth}
+      \point{How to read it}{Each number: how much the model looks at one past payment
+        (0.20 = equal attention).}
+    \column{0.31\textwidth}
+      \point{What we see}{Mostly the latest payment, and almost the same for fraud and
+        normal payments.}
+    \column{0.31\textwidth}
+      \point{What it means}{It is not finding fraud patterns in the history yet; its inputs
+        need improving.}
+  \end{columns}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 16. DAE latent + SHAP
+% 15. Focal loss sweep
 % ---------------------------------------------------------------------
-\speaker{\sHabil}
-\begin{frame}{The DAE signal is complementary and explainable}
-  \vspace{0.2em}
+\speaker{\sAkshin}
+\begin{frame}{Tuning the loss: the popular default was not best}
+  \vspace{0.1em}
+  \centering
+  \includegraphics[width=0.62\linewidth]{focal.pdf}
+  \raggedright
+  \vspace{0.3em}
+  \begin{columns}[T]
+    \column{0.31\textwidth}
+      \point{What we tuned}{Two focal-loss settings: focus on hard examples, and extra
+        weight for fraud.}
+    \column{0.31\textwidth}
+      \point{What we found}{Gentle settings (0.5, 0.5) beat the popular default (2, 0.25);
+        very strong focus hurt.}
+    \column{0.31\textwidth}
+      \point{How big is the effect?}{Small: within about 0.01 of a plain weighted loss
+        (one run each).}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% 17. What the autoencoder sees
+% ---------------------------------------------------------------------
+\speaker{\sSebuhi}
+\begin{frame}{What the autoencoder sees}
+  \vspace{0.1em}
   \begin{columns}[T]
     \column{0.48\textwidth}
       \centering
-      \includegraphics[height=3.35cm]{tsne_latent_space.png}\par
-      \vspace{0.2em}
+      \includegraphics[height=3.7cm]{tsne_latent_space.png}\par
+      \vspace{0.25em}
       \raggedright
-      \small\textbf{\color{brand}Latent space overlaps}\par
-      \footnotesize t-SNE of the 32-d bottleneck (5,000 test rows), silhouette 0.105:
-      anomaly $\neq$ fraud, so the DAE complements the classifier.
+      \point{A map of its 32 numbers}{Each dot is a payment, flattened to 2D (t-SNE).
+        Fraud (dark) and normal (light) overlap, so ``unusual'' does not always mean fraud:
+        it helps, but cannot decide alone.}
     \column{0.48\textwidth}
       \centering
-      \includegraphics[height=3.35cm]{dae_shap_global_importance.png}\par
-      \vspace{0.2em}
+      \includegraphics[height=3.7cm]{dae_shap_global_importance.png}\par
+      \vspace{0.25em}
       \raggedright
-      \small\textbf{\color{brand}SHAP on the anomaly score}\par
-      \footnotesize \texttt{addr1} and \texttt{TransactionAmt} drive reconstruction error;
-      ranking is stable (Spearman $\rho{=}0.898$), top-15 set less so (Jaccard 0.481).
+      \point{Which details look unusual?}{SHAP measures how much each detail adds to the
+        anomaly score. The address code (\texttt{addr1}) and the amount matter most.}
   \end{columns}
-  \source{SHAP explains the DAE anomaly component only, not the final gated decision.}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 17. Latency
+% 18. Speed
 % ---------------------------------------------------------------------
 \speaker{\sSebuhi}
-\begin{frame}{Fast enough to serve on a single CPU}
+\begin{frame}{Fast enough for real-time payments}
   \vspace{0.1em}
   \begin{columns}[T]
-    \column{0.24\textwidth}\midnum{6.56 ms}{median latency, batch 1}
-    \column{0.24\textwidth}\midnum{2,746 tx/s}{throughput at batch 128}
-    \column{0.24\textwidth}\midnum[approve]{0.71 ms}{DAE scorer P99 (ONNX 0.14)}
-    \column{0.24\textwidth}\midnum[muted]{≈2 MB}{DAE as EXIR or ONNX}
+    \column{0.24\textwidth}\midnum{6.6 ms}{to score one payment}
+    \column{0.24\textwidth}\midnum{2,746}{payments per second}
+    \column{0.24\textwidth}\midnum[approve]{CPU only}{no graphics card needed}
+    \column{0.24\textwidth}\midnum[muted]{≈2 MB}{autoencoder file size}
   \end{columns}
   \vspace{0.3em}
   \centering
-  \includegraphics[height=3.1cm]{latency.pdf}
+  \includegraphics[height=2.95cm]{latency.pdf}
   \raggedright
-  \keyline{FT-CAT dominates (5.05 of 6.56 ms)\enspace\textperiodcentered\enspace
-    \textbf{full-pipeline P99 26.95 ms} misses 15 ms; the DAE scorer meets it}
-  \source{Single-CPU container host; 10 warm-up + 50 timed runs; model-side only (no HTTP, no SHAP).}
+  \keyline{The Transformer takes most of the time. Typical: 6.6 ms; the slowest 1 in 100 take
+    27 ms or more (goal: 15 ms).}
+  \source{Measured on a single-CPU machine; model time only, without network overhead.}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 17b. Serving stack
-% ---------------------------------------------------------------------
-\speaker{\sSebuhi}
-\begin{frame}{From checkpoint to endpoint: the serving stack}
-  \vspace{0.3em}
-  \centering
-  \begin{tikzpicture}[font=\footnotesize,scale=0.82,transform shape]
-    \node[box=brand,text width=2.6cm,minimum height=2.9cm] (api) at (0,0)
-      {\textbf{FastAPI}\\[3pt]\texttt{POST /predict}\\\texttt{POST /stream}\\\texttt{POST /explain}\\\texttt{GET /health}\\\texttt{GET /metrics}};
-    \node[box=brandmid,text width=2.9cm,minimum height=2.9cm] (rt) at (4.15,0)
-      {\textbf{Scorers (CPU)}\\[3pt]DAE ONNX 0.14 ms\\DAE EXIR 0.99 ms\\FT-CAT 5.05 ms\\gate 0.12 ms\\[2pt]{\scriptsize P99, batch 1}};
-    \node[box=review,text width=2.9cm,minimum height=2.9cm] (ui) at (8.3,0)
-      {\textbf{Streamlit triage}\\[3pt]live feed\\conformal badges\\SHAP waterfall\\analyst actions};
-
-    \draw[arr] (api.east) -- (rt.west);
-    \draw[arr] (rt.east) -- (ui.west);
-  \end{tikzpicture}
-  \vfill
-  \takeaway{Checkpoints are exported once (EXIR $+$ ONNX); the API serves them
-    statelessly and the dashboard reads the same endpoints the graders can curl.}
-\end{frame}
-
-% ---------------------------------------------------------------------
-% 17c. Reproducibility and delivery
-% ---------------------------------------------------------------------
-\speaker{\sSebuhi}
-\begin{frame}{One command reproduces everything}
-  \vspace{0.4em}
-  \begin{columns}[T]
-    \column{0.44\textwidth}
-      \begin{beamercolorbox}[wd=\linewidth,sep=0.45em,rounded=true]{card}
-        \centering\footnotesize\texttt{./run\_all.sh}
-      \end{beamercolorbox}
-      \centering{\color{muted}$\downarrow$}\par
-      \begin{beamercolorbox}[wd=\linewidth,sep=0.45em,rounded=true]{card}
-        \centering\footnotesize download + prepare\\{\scriptsize\color{muted}always re-runs}
-      \end{beamercolorbox}
-      \centering{\color{muted}$\downarrow$}\par
-      \begin{beamercolorbox}[wd=\linewidth,sep=0.45em,rounded=true]{card}
-        \centering\footnotesize train, or skip\\{\scriptsize\color{muted}if checkpoints exist}
-      \end{beamercolorbox}
-      \centering{\color{muted}$\downarrow$}\par
-      \begin{beamercolorbox}[wd=\linewidth,sep=0.45em,rounded=true]{card}
-        \centering\footnotesize evaluate + serialize\\{\scriptsize\color{muted}EXIR / ONNX}
-      \end{beamercolorbox}
-    \column{0.52\textwidth}
-      \small\textbf{\color{brand}Ship}\par
-      \footnotesize \texttt{init} $\rightarrow$ \texttt{train} $\rightarrow$ \texttt{infer}
-      $+$ \texttt{dashboard} images, published to GHCR; compose profiles start API or API $+$ dashboard.\par
-      \vspace{0.55em}
-      \small\textbf{\color{brand}Gate}\par
-      \footnotesize CI runs black, flake8, and 787 tests with an 80\% coverage gate;
-      fresh-clone reproduction verified end to end.\par
-  \end{columns}
-  \vfill
-  \takeaway{No notebook state, no manual steps: the exact artefacts in the paper
-    rebuild from a clean checkout with one command.}
-\end{frame}
-
-% ---------------------------------------------------------------------
-% 18. Product
+% 19. Product
 % ---------------------------------------------------------------------
 \speaker{\sHabil}
-\begin{frame}{The product: an analyst triage dashboard}
+\begin{frame}{The product: a dashboard for fraud analysts}
   \vspace{0.2em}
   \begin{columns}[T]
     \column{0.62\textwidth}
       \centering
       \screenshot{dashboard_prediction.png}{\linewidth}{Prediction page screenshot}\par
       \vspace{0.15em}
-      {\scriptsize\color{muted}Live prediction: held-out fraud $\rightarrow$ human review (7.43 ms)}%
+      {\scriptsize\color{muted}A real test payment is scored and sent to human review}%
       \hfill\chip{brand}{LIVE DEMO $\rightarrow$}
     \column{0.35\textwidth}
       \centering
       \screenshot{dashboard_command.png}{0.8\linewidth}{Command page screenshot}\par
-      {\scriptsize\color{muted}Command centre}\par
+      {\scriptsize\color{muted}System status}\par
       \vspace{0.25em}
       \screenshot{dashboard_conformal.png}{0.8\linewidth}{Conformal Triage screenshot}\par
-      {\scriptsize\color{muted}Conformal triage}
+      {\scriptsize\color{muted}Confidence check results}
   \end{columns}
 \end{frame}
 
 % =====================================================================
-\section{Conclusion}
+\section{Wrap-up}
 % =====================================================================
 
 % ---------------------------------------------------------------------
-% 19. Limitations & lessons
+% 21. Conclusion
 % ---------------------------------------------------------------------
-\speaker{\sNadir}
-\begin{frame}{Limitations we report, and what we learned}
-  \vspace{0.5em}
-  \begin{columns}[T]
-    \column{0.48\textwidth}
-      \begin{beamercolorbox}[wd=\linewidth,sep=0.55em,rounded=true]{card}
-        \small\textbf{\color{block}Limitations}\par\vspace{0.3em}
-        \footnotesize
-        \begin{itemize}\setlength{\itemsep}{0.35em}
-          \item \textbf{Class asymmetry:} marginal coverage 98.99\%, but fraud-class
-                coverage is only 70.9\%.
-          \item \textbf{No auto-blocking} at $\alpha{=}0.01$: it is an approve-or-review system.
-          \item \textbf{Temporal drift} breaks exchangeability, so 98.99\% is measured,
-                not guaranteed.
-          \item \textbf{Explanations} cover the DAE component, not the fused decision.
-          \item \textbf{History key} card1 may partly encode card identity.
-        \end{itemize}
-      \end{beamercolorbox}
-    \column{0.48\textwidth}
-      \begin{beamercolorbox}[wd=\linewidth,sep=0.55em,rounded=true]{card}
-        \small\textbf{\color{brand}Lessons}\par\vspace{0.3em}
-        \footnotesize
-        \begin{itemize}\setlength{\itemsep}{0.35em}
-          \item \textbf{Evaluate out of time:} PR-AUC fell from 0.44 in development
-                to 0.34 on the final test period.
-          \item \textbf{Complexity must earn its place:} a flat MLP matched or beat
-                FT-CAT, and trees still lead.
-          \item \textbf{Isolate test side effects:} a test once overwrote the serving
-                threshold artifact. It was caught, fixed and regenerated.
-          \item \textbf{Report the operating point}, not just a score:
-                coverage and workload trade off.
-        \end{itemize}
-      \end{beamercolorbox}
-  \end{columns}
-\end{frame}
-
-% ---------------------------------------------------------------------
-% 20. Conclusion
-% ---------------------------------------------------------------------
-\speaker{\sAll}
+\speaker{\sHabil}
 \begin{frame}{Conclusion}
   \vspace{0.4em}
   \begin{columns}[T]
     \column{0.31\textwidth}
       \begin{beamercolorbox}[wd=\linewidth,sep=0.55em,rounded=true]{card}
-        {\small\bfseries\color{brand}Triage, not just scores}\par\vspace{0.3em}
-        \footnotesize 98.99\% coverage at a 99\% target; 76.8\% auto-approved;
-        analysts see 23.2\% and catch 70.9\% of fraud.
+        {\small\bfseries\color{brand}Decisions, not just scores\par}\vspace{0.3em}
+        {\footnotesize 76.8\% of payments are approved automatically; humans review
+        23.2\% and see 71\% of all fraud.\par}
       \end{beamercolorbox}
     \column{0.31\textwidth}
       \begin{beamercolorbox}[wd=\linewidth,sep=0.55em,rounded=true]{card}
-        {\small\bfseries\color{brand}Hybrid, honestly evaluated}\par\vspace{0.3em}
-        \footnotesize DAE + FT-CAT + learned gate under a chronological protocol,
-        with negative ablations reported.
+        {\small\bfseries\color{brand}Honestly tested\par}\vspace{0.3em}
+        {\footnotesize Two detectors combined by a gate, tested on future payments, and
+        we show the results that did not go our way.\par}
       \end{beamercolorbox}
     \column{0.31\textwidth}
       \begin{beamercolorbox}[wd=\linewidth,sep=0.55em,rounded=true]{card}
-        {\small\bfseries\color{brand}Deployable on CPU}\par\vspace{0.3em}
-        \footnotesize 6.56 ms median, 2,746 tx/s; FastAPI, Streamlit,
-        EXIR/ONNX export, Docker, CI.
+        {\small\bfseries\color{brand}Ready to run\par}\vspace{0.3em}
+        {\footnotesize 6.6 ms per payment on a normal CPU, with a web API and an analyst
+        dashboard.\par}
       \end{beamercolorbox}
   \end{columns}
   \vspace{0.8em}
-  \small\textbf{\color{brand}Future work}\par
+  \small\textbf{\color{brand}Next steps}\par
   \vspace{0.3em}
   \begin{columns}[T]
     \column{0.48\textwidth}
       \footnotesize
       \begin{itemize}\setlength{\itemsep}{0.2em}
-        \item Class-conditional (Mondrian) conformal calibration
-        \item Drift monitoring with periodic recalibration
+        \item Separate safety targets for fraud and for normal payments
+        \item Watch for changing fraud patterns and recalibrate regularly
       \end{itemize}
     \column{0.48\textwidth}
       \footnotesize
       \begin{itemize}\setlength{\itemsep}{0.2em}
-        \item Explanations of the full fused decision
-        \item Operating points that allow safe auto-blocking
+        \item Explain the final decision, not just one part
+        \item Find a safe setting that allows automatic blocking
       \end{itemize}
   \end{columns}
 \end{frame}
 
 % ---------------------------------------------------------------------
-% 21. Questions
+% 22. Questions
 % ---------------------------------------------------------------------
 {
 \setbeamertemplate{footline}{}
