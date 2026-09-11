@@ -261,7 +261,9 @@ everything it needs automatically:
    retraining (hours on CPU).
 4. **Serve** — after `run_all.sh`, `docker compose -f docker/docker-compose.yml
    --profile dashboard up --build` starts the API on `:8000` and the dashboard
-   on `:8501`.
+   on `:8501`. The compose stack also runs a lightweight `init-data` container
+   first: on a machine without `data/processed/test.parquet` it downloads and
+   prepares the data automatically before the API starts.
 
 Or execute the major stages individually:
 

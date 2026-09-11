@@ -3,6 +3,17 @@
 # `docker compose --profile train up --build` additionally runs the training container.
 
 services:
+  init-data:
+    image: ghcr.io/sa6uhi/dl-final-project-init:v1.0-final
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.init
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+
   api:
     image: ghcr.io/sa6uhi/dl-final-project-api:v1.0-final
     build:
@@ -19,6 +30,9 @@ services:
       - ../results:/app/results:ro
       - ../logs:/app/logs
     restart: unless-stopped
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 30s
