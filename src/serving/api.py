@@ -1,7 +1,9 @@
 """FastAPI microservice for real-time fraud scoring.
 
-Exposes ``/predict`` (single transaction, sub-15ms P99 target), ``/stream``
-(batch scoring), ``/health`` and ``/metrics``. Models are loaded lazily at
+Exposes ``/predict`` (single transaction), ``/stream`` (JSON batch scoring,
+not SSE), ``/health`` and ``/metrics``. The sub-15ms P99 service objective
+applies to the DAE scorer (0.71~ms eager P99 at batch size 1 on CPU); the
+full neural pipeline median is reported separately. Models are loaded lazily at
 startup: a real autoencoder checkpoint when present, otherwise a reference
 model so the stack is exercisable before training artifacts exist. When a
 learned hybrid gate checkpoint is present, the DAE residual is fused with the
@@ -1053,7 +1055,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             app.state.errors_total += 1
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         latency_ms = (time.perf_counter() - start) * 1000.0
-        app.state.latencies.append(latency_ms)
+        # SHAP explanations run on the order of seconds and would dominate the
+        # scoring latency distribution, so they are counted as requests but
+        # excluded from the /metrics latency percentiles (scoring only).
         app.state.requests_total += 1
         return ExplainResponse(
             transaction_id=request.transaction_id,
@@ -1082,7 +1086,11 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.get("/api/v1/metrics", response_model=MetricsResponse)
     @app.get("/metrics", response_model=MetricsResponse)
     async def metrics() -> MetricsResponse:
-        """Self-monitoring counters: volume, errors, latency percentiles."""
+        """Self-monitoring counters: volume, errors, scoring latency percentiles.
+
+        Latency covers scoring endpoints only (``/predict``, ``/stream``);
+        ``/explain`` requests are counted but excluded from percentiles.
+        """
         latencies = list(app.state.latencies)
         avg = float(np.mean(latencies)) if latencies else 0.0
         p90 = float(np.percentile(latencies, 90)) if latencies else 0.0

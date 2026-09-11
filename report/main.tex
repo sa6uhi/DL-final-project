@@ -27,7 +27,7 @@
 }
 \IEEEauthorblockA{
 AI Academy, National Artificial Intelligence Center, Azerbaijan\\
-Email: habil.huseynov25@aiacademy.edu.az
+Email: nadirr2609@gmail.com, sabuhi.nazarov11@gmail.com, habil.huseynov25@aiacademy.edu.az
 }
 }
 \maketitle
@@ -43,13 +43,16 @@ signal. A learned gating network dynamically combines these signals with
 transaction-history activity and amount-intensity features. Split conformal
 prediction converts the fused fraud score into operational prediction sets for
 automatic approval, automatic blocking, or human review. On the chronological
-held-out test set, the FT-CAT model achieved a PR-AUC of 0.3259 and ROC-AUC of
-0.8172. At a target miscoverage level of 0.01, the conformal system achieved
+held-out test set, the FT-CAT model achieved a PR-AUC of 0.3412 and ROC-AUC of
+0.8144. At a target miscoverage level of 0.01, the conformal system achieved
 98.99\% empirical marginal coverage with a 95\% bootstrap confidence interval of
-98.92--99.06\%, while assigning 23.19\% of transactions to human review.
+98.92--99.06\%, while assigning 23.19\% of transactions to human review
+(chronological test split; temporal shift violates strict exchangeability, so
+this is a measured result, not a production guarantee).
 CPU benchmarking measured a median batch-1 neural inference latency of 6.56 ms
-and peak tested throughput of approximately 2,746 transactions per second at
-batch size 128. The system additionally provides SHAP-based anomaly explanations,
+(P99 26.95 ms) and peak tested throughput of approximately 2,746 transactions
+per second at batch size 128; the 15 ms P99 service objective is met by the
+DAE scorer (0.71 ms eager P99 at batch size 1). The system additionally provides SHAP-based anomaly explanations,
 a Streamlit analyst dashboard, FastAPI serving, and EXIR and ONNX model
 serialization. Repository:
 \url{https://github.com/sa6uhi/DL-final-project}.
@@ -266,17 +269,23 @@ for model fitting or conformal calibration.
 \subsection{Evaluation Metrics}
 Because fraud is highly imbalanced, accuracy alone is insufficient. Supervised
 and gating models are evaluated primarily using area under the precision-recall
-curve (PR-AUC), ROC-AUC, and true-positive rate at the configured
-false-positive-rate operating point.
+curve (PR-AUC), ROC-AUC, and true-positive rate at the 1\% false-positive-rate
+operating point (\texttt{max\_fpr: 0.01}).
 Conformal evaluation reports empirical marginal coverage, class-conditional
 coverage, review rate, singleton rate, review precision, reviewed-fraud capture,
-Brier score, and expected calibration error (ECE).
+Brier score (mean squared probability error), and expected calibration error
+(ECE, binned confidence-accuracy gap).
 Deployment evaluation reports latency percentiles and throughput over several
 batch sizes.
 \subsection{Implementation and Reproducibility}
 The system is implemented in Python and PyTorch. Model and experiment
 configuration is centralized in configuration files, and fixed random seeds are
-used for reproducibility. Tests cover the gating network, conformal predictor,
+used for reproducibility (\texttt{seed\_everything(42)} for training runs;
+gate robustness evaluated at seeds 42, 123, and 2026; FT-CAT checkpoint records
+seed 42). Benchmarks were measured on a single-CPU container host
+with PyTorch CPU builds; the data split is strictly
+chronological (70/15/15 by \texttt{TransactionDT}) with scalers and vocabularies
+fitted on the training block only. Tests cover the gating network, conformal predictor,
 SHAP integration, dashboard behavior, and serialization.
 The trained DAE, FT-CAT, and learned gate can be exported to PyTorch EXIR and
 ONNX. Export routines validate numerical parity against PyTorch inference.
@@ -295,18 +304,18 @@ Table~\ref{tab:baselines} reports validation PR-AUC and ROC-AUC.
 \toprule
 Model & PR-AUC & ROC-AUC \\
 \midrule
-Logistic Regression (balanced) & 0.4354 & 0.8534 \\
-Random Forest (200 trees, depth 16) & 0.4542 & 0.8743 \\
-LightGBM (weighted) & 0.5089 & 0.8991 \\
+Logistic Regression (balanced) & 0.4471 & 0.8609 \\
+Random Forest (200 trees, depth 16) & 0.4698 & 0.8819 \\
+LightGBM (weighted) & 0.5207 & 0.9088 \\
 \bottomrule
 \end{tabular}
 \end{table}
 The random forest uses a maximum depth of 16 and a minimum leaf size of 10:
 without a depth limit, 200 fully grown trees on the full training data
 produced a 550\,MB checkpoint with multi-second inference stalls, while the
-constrained model compresses to 56\,MB and scores the full validation split
+constrained model compresses to 57\,MB and scores the full validation split
 in 0.3\,s on CPU. Final out-of-time test comparison against the deep models
-is reported with the Exp-1 evaluation.
+uses the same chronological held-out test set.
 \subsection{FT-CAT Performance}
 Table~\ref{tab:ftcat} reports final FT-CAT performance on the chronological
 held-out test set.
@@ -318,15 +327,16 @@ held-out test set.
 \toprule
 Metric & Test Result \\
 \midrule
-PR-AUC & 0.3259 \\
-ROC-AUC & 0.8172 \\
-TPR @ configured FPR & 0.2488 \\
-Loss & 0.0119 \\
+PR-AUC & 0.3412 \\
+ROC-AUC & 0.8144 \\
+TPR @ 1\% FPR & 0.2712 \\
+Loss & 0.0117 \\
 \bottomrule
 \end{tabular}
 \end{table}
-The lower test PR-AUC relative to development validation indicates that
-out-of-time generalization is materially harder than performance measured
+The test PR-AUC of 0.3412 is numerically lower than the development-validation
+PR-AUC mean of 0.4395 from the architecture ablation, indicating that
+out-of-time generalization is harder than performance measured
 within the development period. This reinforces the importance of chronological
 evaluation for fraud detection.
 \subsection{Learned Gate Robustness}
@@ -345,11 +355,12 @@ Seed & PR-AUC & ROC-AUC & TPR \\
 2026 & 0.3432 & 0.8324 & 0.2431 \\
 \midrule
 Mean & 0.3381 & 0.8336 & 0.2357 \\
-SD   & 0.0077 & 0.0032 & 0.0070 \\
+SD (sample, $n=3$) & 0.0077 & 0.0032 & 0.0070 \\
 \bottomrule
 \end{tabular}
 \end{table}
-The relatively small standard deviations indicate that the learned fusion model
+The relatively small sample standard deviations (descriptive, $n=3$; no
+significance test) indicate that the learned fusion model
 is not strongly dependent on a single random initialization. Seed 42 was used
 for the production checkpoint according to the project's predetermined random
 seed rather than selected post hoc from the three results.
@@ -371,6 +382,7 @@ Empirical coverage & 98.99\% \\
 Legitimate-class coverage & 100.00\% \\
 Fraud-class coverage & 70.94\% \\
 Human-review rate & 23.19\% \\
+Singleton sets & 76.81\% \\
 Auto-approve rate & 76.81\% \\
 Auto-block rate & 0.00\% \\
 Review precision & 10.65\% \\
@@ -409,7 +421,7 @@ miscoverage levels.}
 \subsection{Autoencoder Latent-Space Analysis}
 A t-SNE analysis was performed on 5,000 held-out transactions using the
 32-dimensional DAE bottleneck representation. The resulting class-based
-silhouette score was 0.1095.
+silhouette score was 0.1046 (training log).
 The visualization in Fig.~\ref{fig:tsne} shows partial structural separation but
 substantial overlap between legitimate and fraudulent transactions. The weak but
 non-zero separation is consistent with the role of the DAE as an unsupervised
@@ -428,8 +440,8 @@ fraud decision boundary.
 \end{figure}
 \subsection{SHAP Analysis}
 SHAP analysis was used to inspect the DAE anomaly component. Across independent
-global samples, the mean Spearman correlation of feature rankings was 0.8924,
-while mean top-feature Jaccard similarity was 0.4762.
+global samples, the mean Spearman correlation of feature rankings was 0.8980,
+while mean top-feature Jaccard similarity was 0.4809.
 Figure~\ref{fig:shap_global} shows the global SHAP importance profile for the DAE
 anomaly component. In the sampled analysis, \texttt{addr1} receives the strongest
 global anomaly attribution. The high mean Spearman rank correlation indicates
@@ -471,7 +483,8 @@ Batch & Median (ms) & P99 (ms) & Throughput \\
 \end{table}
 Batch size 128 produced the highest tested throughput at approximately 2,746
 transactions per second. At batch size 1, median neural inference latency was
-6.56 ms. Component-level profiling showed that FT-CAT dominates the neural
+6.56 ms. Component-level profiling at batch size 1 (median: FT-CAT 5.05 ms,
+DAE 0.42 ms, gate 0.12 ms) showed that FT-CAT dominates the neural
 compute path, whereas learned-gate inference itself is lightweight.
 Figure~\ref{fig:throughput} shows that throughput increases substantially with
 batching before reaching its highest tested value at batch size 128. Throughput
@@ -482,7 +495,10 @@ provides substantial computational efficiency, while increasing the batch size
 beyond 128 produced no additional throughput benefit in the tested CPU
 environment.
 These measurements describe model-side neural inference and should not be
-interpreted as complete HTTP API latency.
+interpreted as complete HTTP API latency. All latency and throughput figures
+were measured on a single-CPU container host and are
+hardware-dependent: absolute timings will vary across CPUs, while the relative
+ordering of components and batch-size trends should reproduce.
 At the component level, the servable DAE scorer was benchmarked separately
 with 200 timed iterations per cell on CPU across batch sizes 1--64. At batch
 size 1, P99 latency was 0.71~ms for PyTorch eager execution, 0.99~ms for the
@@ -498,14 +514,19 @@ objective; DAE-scorer P99 remained below 1~ms at every tested batch size.
 \label{fig:throughput}
 \end{figure}
 \subsection{Deployment and Serialization}
-The trained DAE (485{,}440 parameters, 1.95\,MB checkpoint) was serialized to
-both PyTorch EXIR (2.00\,MB) and ONNX (1.96\,MB) representations. Export-time
+The trained DAE (485{,}440 trainable parameters plus 513 non-trainable
+batch-normalization buffers, 1.95\,MB checkpoint) was serialized to
+both PyTorch EXIR (2.00\,MB) and ONNX (1.96\,MB across the model and data
+files) representations. Export-time
 parity checks compare serialized outputs with their PyTorch reference
-implementations. The FT-CAT and learned-gate checkpoints follow the same
-export pipeline once their training lands.
-The containerized FastAPI scoring service (single CPU worker, DAE-only
-scoring) holds a steady-state resident footprint of approximately 310\,MiB
-inside a 1.91\,GB uncompressed inference image.
+implementations. The trained FT-CAT (94{,}305 parameters) and learned-gate
+(225 parameters) checkpoints have been exported through the same pipeline to
+\texttt{models/serialized/} (EXIR and ONNX); serialized parity reporting for
+these two models follows the DAE procedure.
+The containerized FastAPI scoring service (single CPU worker) ships as an
+approximately 2\,GB uncompressed inference image (roughly 450\,MB compressed
+transfer size), dominated by the PyTorch
+CPU runtime and model weights.
 The product additionally exposes a FastAPI scoring interface and a Streamlit
 analyst dashboard. The dashboard surfaces prediction, batch analysis, model
 insights, conformal triage, explainability, and artifact-readiness information.
@@ -589,7 +610,8 @@ system explicitly identifies cases requiring analyst intervention.
 The deployment prototype supports FastAPI serving, an analyst-facing Streamlit
 dashboard, SHAP-based anomaly explanations, and EXIR and ONNX serialization.
 CPU benchmarking demonstrated a median batch-1 neural inference latency of
-6.56 ms and peak tested throughput of approximately 2,746 transactions per
+6.56 ms (P99 26.95 ms; the 15 ms P99 objective is met by the DAE scorer) and
+peak tested throughput of approximately 2,746 transactions per
 second.
 Future work should investigate class-conditional conformal calibration,
 distribution-shift monitoring, fused-model explanations, and alternative

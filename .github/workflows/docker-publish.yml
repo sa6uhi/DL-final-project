@@ -60,3 +60,13 @@ jobs:
           tags: ghcr.io/${{ env.OWNER_LC }}/dl-final-project-train:${{ inputs.image_tag || 'v1.0-final' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build and push data-init image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.init
+          push: true
+          tags: ghcr.io/${{ env.OWNER_LC }}/dl-final-project-init:${{ inputs.image_tag || 'v1.0-final' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

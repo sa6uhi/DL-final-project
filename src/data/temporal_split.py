@@ -1,7 +1,9 @@
 """Temporal dataset splitting utilities."""
 
 # Import necessary libraries and modules
-from typing import Tuple
+import argparse
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 import pandas as pd
 
@@ -377,3 +379,37 @@ def split_model_development(
     )
 
     return model_train_df, model_val_df
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    """Merge raw CSVs, apply the strict temporal split, and write parquets.
+
+    Args:
+        argv: Command line arguments; uses ``sys.argv`` when omitted.
+    """
+    parser = argparse.ArgumentParser(
+        description="Temporal 70/15/15 split of IEEE-CIS style raw data"
+    )
+    parser.add_argument("--input", type=str, required=True)
+    parser.add_argument("--output", type=str, required=True)
+    parser.add_argument("--time-col", type=str, default="TransactionDT")
+    args = parser.parse_args(argv)
+
+    input_dir = Path(args.input)
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    df_merged = load_and_merge_data(
+        str(input_dir / "train_transaction.csv"),
+        str(input_dir / "train_identity.csv"),
+    )
+    train_df, val_df, test_df = split_temporal(df_merged, time_col=args.time_col)
+
+    train_df.to_parquet(output_dir / "train_raw.parquet", index=False)
+    val_df.to_parquet(output_dir / "val_raw.parquet", index=False)
+    test_df.to_parquet(output_dir / "test_raw.parquet", index=False)
+    logger.info("Raw temporal splits written to %s", output_dir)
+
+
+if __name__ == "__main__":
+    main()

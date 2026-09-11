@@ -35,6 +35,22 @@ export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 SKIPPED_STEPS=0
 STRICT=${STRICT:-0}
+# Set RETRAIN=1 to force model retraining even when checkpoints exist.
+RETRAIN=${RETRAIN:-0}
+
+needs_training() {
+    # Usage: needs_training <checkpoint> [more checkpoints...]
+    # Returns success when RETRAIN=1 or any listed checkpoint is absent.
+    if [ "$RETRAIN" = "1" ]; then
+        return 0
+    fi
+    for checkpoint in "$@"; do
+        if [ ! -f "$checkpoint" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 # 1) Data ingestion (download from public mirror when raw data absent)
 if [ -f "data/raw/train_transaction.csv" ]; then
@@ -58,28 +74,32 @@ else
     fi
 fi
 
-# 3) Semi-supervised DAE autoencoder
-if [ -f "data/processed/train.parquet" ]; then
+# 3) Semi-supervised DAE autoencoder (skipped when checkpoint exists)
+if [ -f "data/processed/train.parquet" ] && needs_training "models/checkpoints/autoencoder.pt"; then
     run "DAE autoencoder training" src/training/train_autoencoder.py --config "$CONFIG"
-else
+elif [ ! -f "data/processed/train.parquet" ]; then
     echo "==> Autoencoder: processed parquet absent, skipping."
     SKIPPED_STEPS=$((SKIPPED_STEPS + 1))
     if [ "$STRICT" = "1" ]; then
         echo "error: processed parquet absent in strict mode" >&2
         exit 1
     fi
+else
+    echo "==> Autoencoder checkpoint present, skipping training (RETRAIN=1 to force)."
 fi
 
-# 4) Classical ML baselines (LogReg, RF, LightGBM/XGBoost)
-if [ -f "data/processed/train.parquet" ]; then
+# 4) Classical ML baselines (skipped when all three pickles exist)
+if [ -f "data/processed/train.parquet" ] && needs_training "models/checkpoints/LogReg_Balanced.pkl" "models/checkpoints/RandomForest_Balanced.pkl" "models/checkpoints/LightGBM_Weighted.pkl"; then
     run "Baseline training" src/training/train_baselines.py
-else
+elif [ ! -f "data/processed/train.parquet" ]; then
     echo "==> Baselines: processed parquet absent, skipping."
     SKIPPED_STEPS=$((SKIPPED_STEPS + 1))
     if [ "$STRICT" = "1" ]; then
         echo "error: processed parquet absent in strict mode" >&2
         exit 1
     fi
+else
+    echo "==> Baseline checkpoints present, skipping training (RETRAIN=1 to force)."
 fi
 
 # 5) Serialize model artifacts (EXIR + ONNX) with parity verification

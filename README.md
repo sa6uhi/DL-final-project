@@ -139,6 +139,14 @@ Inference benchmarks were run on the production checkpoints using warm-up iterat
 
 The learned gate adds very little computational overhead, while the full neural pipeline remains suitable for real-time transaction scoring on CPU.
 
+Latencies above are run means from the artifact; the paper (Table 4) reports medians from the same runs.
+
+The sub-15 ms P99 service objective applies to the DAE scorer (0.71 ms PyTorch-eager P99 at batch size 1 on CPU, 0.99 ms EXIR, 0.14 ms ONNX); end-to-end pipeline latencies are reported as measured.
+
+All timings were measured on a single-CPU container host and
+are hardware-dependent — expect different absolute numbers on other machines;
+component ordering and batch-size trends should reproduce.
+
 Benchmark artifacts are stored in:
 
 ```text
@@ -152,16 +160,16 @@ results/benchmark/inference_benchmark.json
 
 The trained neural models are exported to both PyTorch EXIR (`.pt2`) and ONNX formats.
 
-Serialized artifacts include:
+Serialized artifacts include (under `models/artifacts/`, the `run_all.sh` output directory):
 
 ```text
-models/serialized/
+models/artifacts/
 ├── autoencoder.pt2
-├── autoencoder.onnx
+├── autoencoder.onnx (+ .onnx.data weights sidecar)
 ├── ft_transformer.pt2
-├── ft_transformer.onnx
+├── ft_transformer.onnx (+ .onnx.data weights sidecar)
 ├── hybrid_gating.pt2
-└── hybrid_gating.onnx
+└── hybrid_gating.onnx (+ .onnx.data weights sidecar)
 ```
 
 Numerical parity tests verify that exported models produce outputs within the configured tolerance of the original PyTorch models.
@@ -206,23 +214,81 @@ curl -X POST "http://localhost:8000/predict" \
 }
 ```
 
+### Analyst dashboard
+
+The Streamlit triage dashboard visualizes predictions, conformal confidence badges, and SHAP explanations:
+
+```bash
+streamlit run src/dashboard/app.py --server.port 8501
+```
+
+Or via Docker Compose (API on `8000`, dashboard on `8501`):
+
+```bash
+docker compose -f docker/docker-compose.yml --profile dashboard up --build
+```
+
 ---
 
 ## Quickstart
 
-### Local environment
+> **Recommended: Docker.** It pins the OS, Python version, and dependencies,
+> so the demo behaves identically on the grader's machine and yours. Bare-metal
+> runs are supported on Linux/macOS (see below); on Windows use WSL2 or Docker
+> Desktop — `run_all.sh` is a bash script and will not run in CMD/PowerShell.
+
+### Docker (recommended)
+
+```bash
+docker compose -f docker/docker-compose.yml --profile dashboard up --build
+```
+
+The `init-data` step downloads (~710 MB, first run only) and prepares the data
+automatically then starts the API (`:8000`) and dashboard (`:8501`). The
+inference image is about 2 GB on disk (~450 MB compressed download), mostly
+the PyTorch CPU runtime.
+
+### Local environment (Linux/macOS, Python 3.13+, bash)
 
 ```bash
 python -m venv venv
-venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 ```
+
+`run_all.sh` automatically uses `venv/bin/python` when the virtualenv exists
+at `./venv`, and installs are pinned in `requirements.txt`, but only Docker
+guarantees the exact BLAS / CPU instruction set the benchmark numbers were
+measured with.
 
 Run the full pipeline:
 
 ```bash
 ./run_all.sh
 ```
+
+### Fresh-clone reproduction
+
+A fresh clone contains code, config, model checkpoints, and paper figures, but
+not the raw or processed data (git-ignored). `./run_all.sh` fetches and builds
+everything it needs automatically:
+
+1. **Download** — `src/data/download_data.py` pulls the two IEEE-CIS CSVs
+   (~710 MB total) from a public Hugging Face mirror (no Kaggle account needed)
+   and verifies byte sizes. Time depends on your connection; skipped when
+   `data/raw/` is already populated.
+2. **Prepare** — `src/data/prepare_data.py` merges, chronologically splits
+   (70/15/15), scales, encodes categoricals, and builds K=5 history sequences.
+   Takes about **5 minutes** on a modern CPU; always re-runs so stale
+   `data/processed/` files can never silently poison training or demos.
+3. **Train** — DAE and baselines train only when their checkpoints are absent.
+   Shipped checkpoints are used as-is; set `RETRAIN=1 ./run_all.sh` to force
+   retraining (hours on CPU).
+4. **Serve** — after `run_all.sh`, `docker compose -f docker/docker-compose.yml
+   --profile dashboard up --build` starts the API on `:8000` and the dashboard
+   on `:8501`. The compose stack also runs a lightweight `init-data` container
+   first: on a machine without `data/processed/test.parquet` it downloads and
+   prepares the data automatically before the API starts.
 
 Or execute the major stages individually:
 
@@ -232,7 +298,7 @@ python -m src.data.prepare_data
 python -m src.training.train_autoencoder --config config/config.yaml
 python -m src.serving.model_serializer \
   --input models/checkpoints \
-  --output models/serialized \
+  --output models/artifacts \
   --config config/config.yaml
 python -m experiments.inference_benchmark
 uvicorn src.serving.api:app --host 0.0.0.0 --port 8000
@@ -270,7 +336,7 @@ python -m pytest \
 Current result:
 
 ```text
-148 passed
+787 passed, ~87% coverage (gate: 80%)
 ```
 
 Formatting and linting:
@@ -297,6 +363,8 @@ The GitHub Actions workflow performs:
 
 ```text
 results/
+├── baselines/
+│   └── baseline_metrics.json
 ├── benchmark/
 │   ├── inference_benchmark.csv
 │   └── inference_benchmark.json
@@ -305,10 +373,10 @@ results/
 └── explainability/
 
 figures/
-├── inference_benchmark/
+├── autoencoder_latent/
 ├── conformal/
-├── hybrid_gating/
-└── explainability/
+├── explainability/
+└── inference_benchmark/
 ```
 
 The repository is designed to provide reproducible training, evaluation, uncertainty triage, explainability, model serialization, and production-style serving for a modern fraud detection workflow.

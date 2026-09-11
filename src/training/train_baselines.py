@@ -1,8 +1,10 @@
 """Training script for Classical ML Baselines."""
 
+import argparse
+import json
 import pickle
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Optional
 
 import pandas as pd
 from src.evaluation.metrics_a import evaluate_fraud_metrics
@@ -13,8 +15,23 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def main() -> None:
-    cfg = load_config()
+def main(argv: Optional[List[str]] = None) -> None:
+    """Train classical baselines and persist models plus a metrics artifact.
+
+    Args:
+        argv: Command line arguments; uses ``sys.argv`` when omitted.
+    """
+    parser = argparse.ArgumentParser(description="Train classical ML fraud baselines")
+    parser.add_argument("--config", type=str, default=None)
+    parser.add_argument(
+        "--results-dir",
+        type=str,
+        default="results/baselines",
+        help="Directory for the baseline_metrics.json artifact.",
+    )
+    args = parser.parse_args(argv)
+
+    cfg = load_config(args.config)
     processed_dir: Path = cfg.get_path("data.processed_dir")
     checkpoint_dir: Path = cfg.get_path("paths.checkpoints")
     checkpoint_dir.mkdir(exist_ok=True, parents=True)
@@ -80,6 +97,22 @@ def main() -> None:
     logger.info("--- Baseline Training Complete ---")
     for name, scores in results.items():
         logger.info(f"{name}: PR-AUC = {scores['PR-AUC']:.4f}")
+
+    results_dir = Path(args.results_dir)
+    results_dir.mkdir(exist_ok=True, parents=True)
+    metrics_path = results_dir / "baseline_metrics.json"
+    serializable = {
+        name: {metric: float(value) for metric, value in scores.items()}
+        for name, scores in results.items()
+    }
+    payload = {
+        "n_features": int(X_train.shape[1]),
+        "n_train": int(len(X_train)),
+        "n_val": int(len(X_val)),
+        "models": serializable,
+    }
+    metrics_path.write_text(json.dumps(payload, indent=2))
+    logger.info(f"Wrote baseline metrics to {metrics_path}")
 
 
 if __name__ == "__main__":

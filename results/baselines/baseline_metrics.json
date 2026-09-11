@@ -1,0 +1,19 @@
+{
+  "n_features": 431,
+  "n_train": 413378,
+  "n_val": 88581,
+  "models": {
+    "LogReg_Balanced": {
+      "PR-AUC": 0.44707297526710793,
+      "ROC-AUC": 0.8608582745885839
+    },
+    "RandomForest_Balanced": {
+      "PR-AUC": 0.46976132679879257,
+      "ROC-AUC": 0.8819124120990476
+    },
+    "LightGBM_Weighted": {
+      "PR-AUC": 0.5206843246837481,
+      "ROC-AUC": 0.9088365262627205
+    }
+  }
+}
