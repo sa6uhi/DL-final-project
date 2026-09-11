@@ -524,7 +524,8 @@ implementations. The trained FT-CAT (94{,}305 parameters) and learned-gate
 \texttt{models/serialized/} (EXIR and ONNX); serialized parity reporting for
 these two models follows the DAE procedure.
 The containerized FastAPI scoring service (single CPU worker) ships as an
-approximately 2\,GB uncompressed inference image, dominated by the PyTorch
+approximately 2\,GB uncompressed inference image (roughly 450\,MB compressed
+transfer size), dominated by the PyTorch
 CPU runtime and model weights.
 The product additionally exposes a FastAPI scoring interface and a Streamlit
 analyst dashboard. The dashboard surfaces prediction, batch analysis, model

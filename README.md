@@ -244,7 +244,9 @@ docker compose -f docker/docker-compose.yml --profile dashboard up --build
 ```
 
 The `init-data` step downloads (~710 MB, first run only) and prepares the data
-automatically then starts the API (`:8000`) and dashboard (`:8501`).
+automatically then starts the API (`:8000`) and dashboard (`:8501`). The
+inference image is about 2 GB on disk (~450 MB compressed download), mostly
+the PyTorch CPU runtime.
 
 ### Local environment
 
