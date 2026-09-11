@@ -165,11 +165,11 @@ Serialized artifacts include (under `models/artifacts/`, the `run_all.sh` output
 ```text
 models/artifacts/
 ├── autoencoder.pt2
-├── autoencoder.onnx
+├── autoencoder.onnx (+ .onnx.data weights sidecar)
 ├── ft_transformer.pt2
-├── ft_transformer.onnx
+├── ft_transformer.onnx (+ .onnx.data weights sidecar)
 ├── hybrid_gating.pt2
-└── hybrid_gating.onnx
+└── hybrid_gating.onnx (+ .onnx.data weights sidecar)
 ```
 
 Numerical parity tests verify that exported models produce outputs within the configured tolerance of the original PyTorch models.
