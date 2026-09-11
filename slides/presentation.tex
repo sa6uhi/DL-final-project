@@ -255,7 +255,7 @@
 % ---------------------------------------------------------------------
 % 2. Problem
 % ---------------------------------------------------------------------
-\speaker{\sHabil}
+\speaker{\sNadir}
 \begin{frame}{Fraud is rare, drifting, and costly to get wrong}
   \vspace{0.2em}
   \begin{columns}[T]
@@ -266,45 +266,15 @@
     \column{0.31\textwidth}
       \bignum[review]{<15 ms}{latency budget for an inline\\payment decision}
   \end{columns}
-  \vspace{1.0em}
-  \begin{columns}[T]
-    \column{0.46\textwidth}
-      \small\textbf{\color{brand}What a model usually answers}\par\vspace{0.3em}
-      \footnotesize ``What is the probability this transaction is fraud?''
-    \column{0.46\textwidth}
-      \small\textbf{\color{brand}What an operator actually needs}\par\vspace{0.3em}
-      \footnotesize ``Can I \textbf{approve} or \textbf{block} this automatically,
-      or must a \textbf{human review} it?''
-  \end{columns}
+  \vspace{0.8em}
+  \keyline{Our answer: \textbf{FT-CAT} reads card history ($K{=}5$)
+    \enspace\textperiodcentered\enspace \textbf{DAE} flags what legitimate traffic
+    never looks like \enspace\textperiodcentered\enspace \textbf{conformal triage}
+    decides approve / block / review \enspace\textperiodcentered\enspace shipped as
+    \textbf{FastAPI + Streamlit} on CPU.}
   \vfill
   \takeaway{Goal: an end-to-end product that scores transactions on a CPU and
     \textbf{knows when it is unsure}, routing only uncertain cases to analysts.}
-\end{frame}
-
-% ---------------------------------------------------------------------
-% 3. Gaps -> answers
-% ---------------------------------------------------------------------
-\begin{frame}{Three gaps in fraud engines, three answers}
-  \begin{columns}[T]
-    \column{0.31\textwidth}
-      \gapcard{1\enspace Isolated rows}
-        {Scoring each transaction alone misses velocity bursts and behaviour shifts.}
-        {FT-CAT Transformer}
-        {Feature tokens cross-attend to the card's last $K{=}5$ transactions.}
-    \column{0.31\textwidth}
-      \gapcard{2\enspace Zero-day fraud}
-        {Supervised models only recognise fraud seen in past labels.}
-        {Denoising autoencoder}
-        {Trained on legitimate traffic only; flags what does not reconstruct.}
-    \column{0.31\textwidth}
-      \gapcard{3\enspace Uncalibrated scores}
-        {A raw score says nothing about when it can be trusted.}
-        {Split conformal triage}
-        {Prediction sets with a coverage target decide approve / block / review.}
-  \end{columns}
-  \vfill
-  \keyline{Plus a \textbf{learned gate} fusing both detectors, shipped as a
-    \textbf{FastAPI + Streamlit} product on CPU.}
 \end{frame}
 
 % ---------------------------------------------------------------------
@@ -637,7 +607,7 @@
 % ---------------------------------------------------------------------
 % 11. FT-CAT test + gate robustness
 % ---------------------------------------------------------------------
-\speaker{\sAkshin}
+\speaker{\sNadir}
 \begin{frame}{Out-of-time testing is harder than development}
   \vspace{0.6em}
   \begin{columns}[T]
@@ -669,6 +639,7 @@
 % ---------------------------------------------------------------------
 % 12. Architecture ablation
 % ---------------------------------------------------------------------
+\speaker{\sAkshin}
 \begin{frame}{Ablation: attention did not beat a flat MLP}
   \vspace{0.3em}
   \begin{columns}[c]
@@ -689,31 +660,8 @@
   \end{columns}
   \vfill
   \keyline{\small Reported, not hidden: FT-CAT's extra complexity is \textbf{not yet justified}
-    by test PR-AUC.}
-\end{frame}
-
-% ---------------------------------------------------------------------
-% 13. Attention heatmap
-% ---------------------------------------------------------------------
-\begin{frame}{Why: history attention is nearly uniform}
-  \vspace{0.2em}
-  \centering
-  \includegraphics[width=0.76\linewidth]{attention.pdf}
-  \source{[CLS]$\rightarrow$history cross-attention, trained FT-CAT checkpoint,
-    512 fraud + 512 legitimate rows. Uniform attention over 5 slots = 0.20.}
-  \raggedright
-  \vspace{0.25em}
-  \begin{columns}[T]
-    \column{0.31\textwidth}
-      \small\textbf{\color{brand}Recency bias}\par
-      \footnotesize Every head weights the latest transaction most (0.27--0.33).
-    \column{0.31\textwidth}
-      \small\textbf{\color{brand}No fraud signature}\par
-      \footnotesize Fraud and legitimate differ by at most 0.04: the layer mostly averages.
-    \column{0.31\textwidth}
-      \small\textbf{\color{brand}Feature-contract smell}\par
-      \footnotesize 9 of the 10 most history-driven tokens are \texttt{\_is\_nan} flags.
-  \end{columns}
+    by test PR-AUC. Attention diagnostics agree: history attention is nearly uniform
+    (fraud vs legitimate differ by at most 0.04), so the layer mostly averages.}
 \end{frame}
 
 % ---------------------------------------------------------------------
@@ -897,6 +845,7 @@
 % ---------------------------------------------------------------------
 % 19. Limitations & lessons
 % ---------------------------------------------------------------------
+\speaker{\sNadir}
 \begin{frame}{Limitations we report, and what we learned}
   \vspace{0.5em}
   \begin{columns}[T]
