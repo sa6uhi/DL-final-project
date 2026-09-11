@@ -228,6 +228,20 @@ docker compose -f docker/docker-compose.yml --profile dashboard up --build
 
 ## Quickstart
 
+> **Recommended: Docker.** It pins the OS, Python version, and dependencies,
+> so the demo behaves identically on the grader's machine and yours. Bare-metal
+> runs are supported on Linux/macOS (see below); on Windows use WSL2 or Docker
+> Desktop — `run_all.sh` is a bash script and will not run in CMD/PowerShell.
+
+### Docker (recommended)
+
+```bash
+docker compose -f docker/docker-compose.yml --profile dashboard up --build
+```
+
+The `init-data` step downloads (~710 MB, first run only) and prepares the data
+automatically then starts the API (`:8000`) and dashboard (`:8501`).
+
 ### Local environment
 
 ```bash
@@ -235,6 +249,11 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
+
+Requires Linux or macOS with Python 3.13+ and bash. `run_all.sh` automatically
+uses `venv/bin/python` when the virtualenv exists at `./venv`, and installs
+are pinned in `requirements.txt`, but only Docker guarantees the exact BLAS /
+CPU instruction set the benchmark numbers were measured with.
 
 Run the full pipeline:
 
