@@ -495,7 +495,10 @@ provides substantial computational efficiency, while increasing the batch size
 beyond 128 produced no additional throughput benefit in the tested CPU
 environment.
 These measurements describe model-side neural inference and should not be
-interpreted as complete HTTP API latency.
+interpreted as complete HTTP API latency. All latency and throughput figures
+were measured on a single-CPU container host (Intel i7-12700H) and are
+hardware-dependent: absolute timings will vary across CPUs, while the relative
+ordering of components and batch-size trends should reproduce.
 At the component level, the servable DAE scorer was benchmarked separately
 with 200 timed iterations per cell on CPU across batch sizes 1--64. At batch
 size 1, P99 latency was 0.71~ms for PyTorch eager execution, 0.99~ms for the
