@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Final, NamedTuple
+from typing import Any, Final
 from urllib import error, request
 
 import streamlit as st
@@ -68,22 +68,15 @@ GATE_DISAGREEMENT_FIGURE: Final[Path] = FIGURES_DIR / "hybrid_gating" / "gate_di
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
-class NavigationItem(NamedTuple):
-    """One sidebar navigation item."""
-
-    label: str
-    icon: str
-
-
-NAV_ITEMS: Final[tuple[NavigationItem, ...]] = (
-    NavigationItem("Command", "◧"),
-    NavigationItem("Prediction", "◎"),
-    NavigationItem("Batch Analysis", "▦"),
-    NavigationItem("Model Insights", "◫"),
-    NavigationItem("Conformal Triage", "◇"),
-    NavigationItem("Explainability", "✦"),
-    NavigationItem("Settings", "⚙"),
-    NavigationItem("About", "ⓘ"),
+NAV_ITEMS: Final[tuple[str, ...]] = (
+    "Command",
+    "Prediction",
+    "Batch Analysis",
+    "Model Insights",
+    "Conformal Triage",
+    "Explainability",
+    "Settings",
+    "About",
 )
 
 
@@ -297,25 +290,43 @@ def build_prediction_payload(row: Any) -> dict[str, Any]:
 # Styling
 # ---------------------------------------------------------------------------
 def inject_styles() -> None:
-    """Inject command-center-inspired dark green styling."""
+    """Inject command-center-inspired graphite styling.
+
+    Neutral graphite/white/gray carries most of the interface; a small set
+    of semantic accents (blue/cyan/purple for model identity, green/amber/
+    red for ready/review/fraud states) is layered on top only where the
+    color itself communicates something, not as blanket decoration.
+    """
+    st.markdown(
+        (
+            '<link rel="preconnect" href="https://fonts.googleapis.com">'
+            '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+            '<link href="https://fonts.googleapis.com/css2?family='
+            'IBM+Plex+Mono:wght@500;600;700&display=swap" '
+            'rel="stylesheet">'
+        ),
+        unsafe_allow_html=True,
+    )
     st.markdown(
         """
         <style>
         :root {
-            --bg: #0A1210;
-            --sidebar: #101C19;
-            --surface: #172A25;
-            --surface-2: #1A2F28;
-            --surface-3: #0E1A16;
-            --border: #233D35;
-            --border-soft: #1E332C;
-            --green: #2ECC8C;
-            --green-bright: #6BF5B5;
-            --green-muted: #8FBFB0;
-            --text: #E8F5F0;
-            --muted: #6C9488;
-            --yellow: #F5C76B;
-            --red: #FF7A7A;
+            --bg: #0D1117;
+            --sidebar: #11161D;
+            --surface: #171C24;
+            --surface-2: #1C222C;
+            --surface-3: #12171E;
+            --border: #2A303B;
+            --border-soft: #222832;
+            --text: #F1F3F5;
+            --muted: #929AA6;
+            --blue: #6C8FF8;
+            --cyan: #62C3D0;
+            --green: #55C995;
+            --amber: #E8B86D;
+            --red: #E87979;
+            --purple: #A78BDA;
+            --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
         }
 
         html, body, [class*="css"] {
@@ -330,13 +341,7 @@ def inject_styles() -> None:
         }
 
         .stApp {
-            background:
-                radial-gradient(
-                    circle at 80% 10%,
-                    rgba(46, 204, 140, 0.05),
-                    transparent 25%
-                ),
-                var(--bg);
+            background: var(--bg);
             color: var(--text);
         }
 
@@ -352,7 +357,7 @@ def inject_styles() -> None:
         }
 
         [data-testid="stSidebar"] * {
-            color: var(--green-muted);
+            color: var(--muted);
         }
 
         [data-testid="stSidebar"] h2,
@@ -365,32 +370,33 @@ def inject_styles() -> None:
         }
 
         [data-testid="stSidebar"] .stRadio label {
-            border-radius: 12px;
-            padding: 0.68rem 0.8rem;
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
             transition: all 0.15s ease;
+            border-left: 3px solid transparent;
         }
 
         [data-testid="stSidebar"] .stRadio label:hover {
-            background: #172A25;
+            background: var(--surface);
         }
 
         [data-testid="stSidebar"] .stRadio label:has(input:checked) {
-            background: #172A25;
-            border: 1px solid var(--border);
-            box-shadow:
-                inset 0 0 0 1px rgba(107, 245, 181, 0.08);
+            background: var(--surface-2);
+            border-left: 3px solid var(--blue);
         }
 
         [data-testid="stSidebar"] .stRadio label:has(input:checked) p {
-            color: var(--green-bright) !important;
+            color: var(--text) !important;
+            font-weight: 600;
         }
 
         h1, h2, h3 {
             color: var(--text) !important;
+            letter-spacing: -0.01em;
         }
 
         p, label {
-            color: var(--green-muted);
+            color: var(--muted);
         }
 
         .command-header {
@@ -420,9 +426,9 @@ def inject_styles() -> None:
             display: inline-flex;
             align-items: center;
             gap: 0.55rem;
-            border: 1px solid #1F4F3E;
-            background: #0E211C;
-            color: var(--green-bright);
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--green);
             padding: 0.42rem 0.72rem;
             border-radius: 999px;
             font-size: 0.68rem;
@@ -435,13 +441,14 @@ def inject_styles() -> None:
             height: 8px;
             background: var(--green);
             border-radius: 50%;
-            box-shadow: 0 0 9px rgba(46, 204, 140, 0.9);
+            box-shadow: 0 0 9px rgba(85, 201, 149, 0.9);
         }
 
         .section-title {
             color: var(--text);
-            font-size: 0.9rem;
-            font-weight: 700;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
             margin-bottom: 0.7rem;
             margin-top: 0.6rem;
         }
@@ -463,17 +470,18 @@ def inject_styles() -> None:
         }
 
         .metric-label {
-            color: #7AA99B;
+            color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            font-weight: 700;
+            font-weight: 600;
             font-size: 0.66rem;
         }
 
         .metric-value {
+            font-family: var(--mono);
             color: var(--text);
-            font-size: 1.45rem;
-            font-weight: 700;
+            font-size: 1.4rem;
+            font-weight: 600;
             margin-top: 0.35rem;
         }
 
@@ -484,20 +492,19 @@ def inject_styles() -> None:
             line-height: 1.4;
         }
 
-        .green-value {
-            color: var(--green-bright);
-        }
-
-        .yellow-value {
-            color: var(--yellow);
-        }
+        .metric-value.accent-green { color: var(--green); }
+        .metric-value.accent-blue { color: var(--blue); }
+        .metric-value.accent-cyan { color: var(--cyan); }
+        .metric-value.accent-purple { color: var(--purple); }
+        .metric-value.accent-amber { color: var(--amber); }
+        .metric-value.accent-red { color: var(--red); }
 
         .pipeline-card {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.2rem 1.35rem;
-            color: var(--green-muted);
+            color: var(--muted);
             box-shadow: 0 6px 22px rgba(0, 0, 0, 0.16);
             line-height: 2.2;
         }
@@ -511,11 +518,54 @@ def inject_styles() -> None:
             border-radius: 8px;
             margin: 0.15rem;
             font-size: 0.78rem;
+            font-family: var(--mono);
         }
 
-        .pipeline-accent {
-            color: var(--green-bright);
-            border-color: rgba(46, 204, 140, 0.4);
+        .pipeline-ftcat {
+            color: var(--blue);
+            border-color: rgba(108, 143, 248, 0.4);
+        }
+
+        .pipeline-dae {
+            color: var(--cyan);
+            border-color: rgba(98, 195, 208, 0.4);
+        }
+
+        .pipeline-gate {
+            color: var(--purple);
+            border-color: rgba(167, 139, 218, 0.4);
+        }
+
+        .pipeline-conformal {
+            color: var(--blue);
+            border-color: rgba(108, 143, 248, 0.4);
+        }
+
+        .pipeline-arrow {
+            color: var(--muted);
+            font-weight: 700;
+            margin: 0 0.1rem;
+        }
+
+        .pipeline-join {
+            color: var(--muted);
+            font-size: 0.72rem;
+            margin: 0 0.05rem;
+        }
+
+        .pipeline-approve {
+            color: var(--green);
+            border-color: rgba(85, 201, 149, 0.4);
+        }
+
+        .pipeline-review {
+            color: var(--amber);
+            border-color: rgba(232, 184, 109, 0.4);
+        }
+
+        .pipeline-block {
+            color: var(--red);
+            border-color: rgba(232, 121, 121, 0.4);
         }
 
         .status-panel {
@@ -532,7 +582,7 @@ def inject_styles() -> None:
             align-items: center;
             min-height: 46px;
             border-bottom: 1px solid var(--border-soft);
-            color: var(--green-muted);
+            color: var(--muted);
             font-size: 0.78rem;
         }
 
@@ -540,26 +590,13 @@ def inject_styles() -> None:
             border-bottom: none;
         }
 
-        .ready-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            background: rgba(46, 204, 140, 0.10);
-            border: 1px solid rgba(46, 204, 140, 0.20);
-            color: var(--green-bright);
-            border-radius: 999px;
-            padding: 0.22rem 0.5rem;
-            font-size: 0.64rem;
-            font-weight: 700;
-        }
-
         .pending-pill {
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
-            background: rgba(245, 199, 107, 0.08);
-            border: 1px solid rgba(245, 199, 107, 0.20);
-            color: var(--yellow);
+            background: rgba(232, 184, 109, 0.08);
+            border: 1px solid rgba(232, 184, 109, 0.20);
+            color: var(--amber);
             border-radius: 999px;
             padding: 0.22rem 0.5rem;
             font-size: 0.64rem;
@@ -579,8 +616,18 @@ def inject_styles() -> None:
             width: 6px;
             height: 6px;
             border-radius: 999px;
-            background: var(--yellow);
+            background: var(--amber);
             display: inline-block;
+        }
+
+        .ready-quiet {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: var(--muted);
+            font-size: 0.66rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
         }
 
         .artifact-card {
@@ -626,19 +673,14 @@ def inject_styles() -> None:
             width: 38px;
             height: 38px;
             border-radius: 12px;
-            background:
-                linear-gradient(
-                    135deg,
-                    var(--green),
-                    var(--green-bright)
-                );
+            background: var(--green);
             display: flex;
             align-items: center;
             justify-content: center;
             color: var(--bg);
             font-weight: 900;
             font-size: 1.1rem;
-            box-shadow: 0 0 18px rgba(46, 204, 140, 0.28);
+            box-shadow: 0 0 18px rgba(85, 201, 149, 0.28);
             margin-bottom: 0.8rem;
         }
 
@@ -650,10 +692,313 @@ def inject_styles() -> None:
             font-size: 0.72rem;
         }
 
-        .tiny-green {
-            color: var(--green-bright);
-            font-family: monospace;
+        .tiny-mono {
+            color: var(--muted);
+            font-family: var(--mono);
             font-size: 0.72rem;
+        }
+
+        /* ------------------------------------------------------------------
+           Prediction experience
+           ------------------------------------------------------------------ */
+
+        .prediction-hero {
+            position: relative;
+            overflow: hidden;
+            min-height: 245px;
+            margin: 0.2rem 0 1.35rem;
+            padding: 2.15rem 2.35rem;
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            background:
+                radial-gradient(
+                    circle at 78% 34%,
+                    rgba(167, 139, 218, 0.16),
+                    transparent 23%
+                ),
+                radial-gradient(
+                    circle at 68% 45%,
+                    rgba(108, 143, 248, 0.15),
+                    transparent 29%
+                ),
+                radial-gradient(
+                    circle at 90% 55%,
+                    rgba(98, 195, 208, 0.09),
+                    transparent 20%
+                ),
+                linear-gradient(
+                    120deg,
+                    #111720 0%,
+                    #111721 46%,
+                    #121827 100%
+                );
+        }
+
+        .prediction-hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.16;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size: 42px 42px;
+            mask-image: linear-gradient(
+                to right,
+                transparent 20%,
+                black 75%
+            );
+        }
+
+        .prediction-kicker {
+            position: relative;
+            z-index: 1;
+            color: var(--blue);
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            margin-bottom: 0.55rem;
+        }
+
+        .prediction-title {
+            position: relative;
+            z-index: 1;
+            margin: 0;
+            color: var(--text);
+            font-size: clamp(2.4rem, 5vw, 4.25rem);
+            font-weight: 800;
+            letter-spacing: -0.055em;
+            line-height: 0.98;
+        }
+
+        .prediction-title-accent {
+            background: linear-gradient(
+                90deg,
+                var(--blue),
+                var(--purple)
+            );
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .prediction-tagline {
+            position: relative;
+            z-index: 1;
+            color: #D8DEE8;
+            margin-top: 0.8rem;
+            font-size: 1.05rem;
+            font-weight: 500;
+        }
+
+        .prediction-description {
+            position: relative;
+            z-index: 1;
+            max-width: 620px;
+            margin-top: 0.4rem;
+            color: var(--muted);
+            font-size: 0.85rem;
+            line-height: 1.65;
+        }
+
+        .prediction-capabilities {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            margin-top: 1.45rem;
+        }
+
+        .prediction-capability {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.65rem;
+        }
+
+        .capability-icon {
+            display: flex;
+            width: 34px;
+            height: 34px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: rgba(108, 143, 248, 0.11);
+            border: 1px solid rgba(108, 143, 248, 0.24);
+            color: var(--blue);
+            font-weight: 800;
+        }
+
+        .capability-copy strong {
+            display: block;
+            color: var(--text);
+            font-size: 0.79rem;
+            margin-bottom: 0.12rem;
+        }
+
+        .capability-copy span {
+            color: var(--muted);
+            font-size: 0.69rem;
+        }
+
+        .prediction-selection-shell {
+            padding: 1.15rem 1.35rem 0.3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(
+                145deg,
+                rgba(23, 28, 36, 0.94),
+                rgba(18, 23, 31, 0.96)
+            );
+            border: 1px solid var(--border);
+            border-radius: 18px;
+        }
+
+        .prediction-selection-title {
+            color: var(--text);
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .prediction-selection-caption {
+            color: var(--muted);
+            font-size: 0.75rem;
+            margin-top: 0.16rem;
+            margin-bottom: 0.85rem;
+        }
+
+        /* Primary prediction CTA */
+        div[data-testid="stButton"] > button[kind="primary"] {
+            min-height: 58px;
+            border: 1px solid rgba(108, 143, 248, 0.75) !important;
+            border-radius: 14px !important;
+            background:
+                linear-gradient(
+                    100deg,
+                    #2697F3 0%,
+                    #5577F6 48%,
+                    #A72BF2 100%
+                ) !important;
+            color: #FFFFFF !important;
+            font-weight: 750 !important;
+            font-size: 0.95rem !important;
+            letter-spacing: -0.01em;
+            box-shadow:
+                0 8px 28px rgba(73, 104, 245, 0.20),
+                0 0 32px rgba(167, 43, 242, 0.08);
+            transition:
+                transform 0.15s ease,
+                box-shadow 0.15s ease,
+                filter 0.15s ease;
+        }
+
+        div[data-testid="stButton"] > button[kind="primary"]:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.08);
+            box-shadow:
+                0 10px 34px rgba(73, 104, 245, 0.28),
+                0 0 38px rgba(167, 43, 242, 0.12);
+        }
+
+        div[data-testid="stButton"] > button[kind="primary"] p {
+            color: #FFFFFF !important;
+            font-weight: 750 !important;
+        }
+
+        /* Prediction workflow */
+        .workflow-card {
+            margin-top: 1.15rem;
+            padding: 1.15rem 1.35rem;
+            background:
+                linear-gradient(
+                    110deg,
+                    rgba(98, 195, 208, 0.035),
+                    rgba(108, 143, 248, 0.045),
+                    rgba(167, 139, 218, 0.035)
+                ),
+                var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+        }
+
+        .workflow-title {
+            color: var(--text);
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .workflow-steps {
+            display: grid;
+            grid-template-columns:
+                minmax(0, 1fr) auto
+                minmax(0, 1fr) auto
+                minmax(0, 1fr) auto
+                minmax(0, 1fr);
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .workflow-step {
+            display: flex;
+            gap: 0.7rem;
+            align-items: center;
+        }
+
+        .workflow-number {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(
+                135deg,
+                rgba(38, 151, 243, 0.88),
+                rgba(100, 80, 225, 0.88)
+            );
+            border: 1px solid rgba(108, 143, 248, 0.55);
+            color: white;
+            font-family: var(--mono);
+            font-weight: 700;
+        }
+
+        .workflow-copy strong {
+            display: block;
+            color: var(--text);
+            font-size: 0.73rem;
+        }
+
+        .workflow-copy span {
+            display: block;
+            color: var(--muted);
+            font-size: 0.64rem;
+            margin-top: 0.1rem;
+        }
+
+        .workflow-arrow {
+            color: #596473;
+            font-size: 1rem;
+        }
+
+        @media (max-width: 900px) {
+            .prediction-hero {
+                padding: 1.5rem;
+            }
+
+            .prediction-capabilities {
+                gap: 1rem;
+            }
+
+            .workflow-steps {
+                grid-template-columns: 1fr;
+            }
+
+            .workflow-arrow {
+                display: none;
+            }
         }
         </style>
         """,
@@ -695,16 +1040,22 @@ def render_metric_card(
     value: str,
     note: str,
     *,
-    accent: str = "green",
+    accent: str = "neutral",
 ) -> None:
-    """Render one command-center metric card."""
-    value_class = "yellow-value" if accent == "yellow" else "green-value"
+    """Render one command-center metric card.
+
+    Values default to a neutral white/gray so a card is not colored just
+    because it exists. Pass a semantic accent (green/amber/red for a
+    ready/review/fraud state, blue/cyan/purple for FT-CAT/DAE/Gate
+    identity) only when the value itself carries that meaning.
+    """
+    value_class = "metric-value" if accent == "neutral" else f"metric-value accent-{accent}"
 
     st.markdown(
         f"""
         <div class="metric-card">
             <div class="metric-label">{label}</div>
-            <div class="metric-value {value_class}">
+            <div class="{value_class}">
                 {value}
             </div>
             <div class="metric-note">{note}</div>
@@ -718,28 +1069,39 @@ def render_status_row(
     label: str,
     available: bool,
 ) -> None:
-    """Render one artifact-readiness row."""
-    if available:
-        css_class = "ready-pill"
-        dot_class = "small-dot-ready"
-        text = "READY"
-    else:
-        css_class = "pending-pill"
-        dot_class = "small-dot-pending"
-        text = "PENDING"
+    """Render one artifact-readiness row.
 
-    st.markdown(
-        f"""
-        <div class="status-row">
-            <span>{label}</span>
-            <span class="{css_class}">
-                <span class="{dot_class}"></span>
-                {text}
-            </span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    Ready is the expected, common state and stays quiet (a small
+    checkmark-style dot); only a genuinely pending artifact gets the
+    bordered attention-pill, so the exception is what stands out
+    instead of every row shouting the same badge.
+    """
+    if available:
+        st.markdown(
+            f"""
+            <div class="status-row">
+                <span>{label}</span>
+                <span class="ready-quiet">
+                    <span class="small-dot-ready"></span>
+                    Ready
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f"""
+            <div class="status-row">
+                <span>{label}</span>
+                <span class="pending-pill">
+                    <span class="small-dot-pending"></span>
+                    PENDING
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_artifact_image(
@@ -777,54 +1139,22 @@ def render_artifact_image(
 # Command page
 # ---------------------------------------------------------------------------
 def command_page() -> None:
-    """Render the main fraud-command overview."""
+    """Render the main fraud-command overview.
+
+    One pass over the live API, then three non-repeating sections: the
+    headline conformal numbers, the decision pipeline, and readiness —
+    each concept (model checkpoints vs. generated artifacts) shown once
+    rather than the same "ready" state echoed across several card styles.
+    """
     render_header(
         "Fraud Triage Engine",
         "FT-CAT • DAE • Learned Gate • Split Conformal Prediction",
     )
 
-    st.markdown(
-        '<div class="section-title">Live API Status</div>',
-        unsafe_allow_html=True,
-    )
-
     try:
-        health = api_get("health")
+        api_get("health")
     except RuntimeError as exc:
         st.error(str(exc))
-    else:
-        health_columns = st.columns(4)
-
-        with health_columns[0]:
-            render_metric_card(
-                "FastAPI",
-                "ONLINE",
-                API_BASE_URL,
-            )
-
-        with health_columns[1]:
-            render_metric_card(
-                "FT-CAT Runtime",
-                "READY" if health.get("ft_model_loaded") else "NOT LOADED",
-                "Server-side supervised fraud model",
-                accent="green" if health.get("ft_model_loaded") else "yellow",
-            )
-
-        with health_columns[2]:
-            render_metric_card(
-                "Learned Gate",
-                "READY" if health.get("gate_loaded") else "NOT LOADED",
-                "Dynamic fraud-signal fusion",
-                accent="green" if health.get("gate_loaded") else "yellow",
-            )
-
-        with health_columns[3]:
-            render_metric_card(
-                "Conformal",
-                "READY" if health.get("conformal_loaded") else "NOT LOADED",
-                "Uncertainty-aware triage",
-                accent="green" if health.get("conformal_loaded") else "yellow",
-            )
 
     conformal_data = select_conformal_result(
         load_json(CONFORMAL_RESULTS),
@@ -848,40 +1178,51 @@ def command_page() -> None:
         "singleton_rate",
     )
 
-    col1, col2, col3, col4 = st.columns(4)
+    st.markdown(
+        '<div class="section-title">System Overview</div>',
+        unsafe_allow_html=True,
+    )
 
-    with col1:
-        render_metric_card(
-            "FT-CAT Transformer",
-            status_label(FT_CHECKPOINT.is_file()),
-            "Supervised fraud-probability model",
-        )
+    overview_columns = st.columns(3)
 
-    with col2:
-        render_metric_card(
-            "Denoising Autoencoder",
-            status_label(DAE_CHECKPOINT.is_file()),
-            "Unsupervised anomaly component",
-        )
+    with overview_columns[0]:
+        if coverage is None:
+            value = "PENDING"
+            note = "Waiting for final held-out conformal evaluation"
+            accent = "amber"
+        else:
+            value = f"{coverage * 100:.2f}%"
+            note = "Empirical held-out conformal coverage"
+            accent = "neutral"
 
-    with col3:
-        render_metric_card(
-            "Learned Hybrid Gate",
-            status_label(GATE_CHECKPOINT.is_file()),
-            "Dynamic fusion of model and history signals",
-            accent="yellow" if not GATE_CHECKPOINT.is_file() else "green",
-        )
+        render_metric_card("Conformal Coverage", value, note, accent=accent)
 
-    with col4:
-        render_metric_card(
-            "Conformal Calibration",
-            status_label(CONFORMAL_RESULTS.is_file()),
-            "Uncertainty-aware triage layer",
-            accent="yellow" if not CONFORMAL_RESULTS.is_file() else "green",
-        )
+    with overview_columns[1]:
+        if review_rate is None:
+            value = "PENDING"
+            note = "Analyst workload will populate from real evaluation"
+            accent = "amber"
+        else:
+            value = f"{review_rate * 100:.2f}%"
+            note = "Transactions routed to human review"
+            accent = "neutral"
+
+        render_metric_card("Analyst Review Workload", value, note, accent=accent)
+
+    with overview_columns[2]:
+        if singleton_rate is None:
+            value = "PENDING"
+            note = "Singleton prediction-set rate not generated yet"
+            accent = "amber"
+        else:
+            value = f"{singleton_rate * 100:.2f}%"
+            note = "Confident singleton conformal decisions"
+            accent = "neutral"
+
+        render_metric_card("Singleton Decisions", value, note, accent=accent)
 
     st.markdown(
-        '<div class="section-title">Inference Architecture</div>',
+        '<div class="section-title">Decision Pipeline</div>',
         unsafe_allow_html=True,
     )
 
@@ -889,149 +1230,59 @@ def command_page() -> None:
         """
         <div class="pipeline-card">
             <span class="pipeline-node">Transaction</span>
-            →
-            <span class="pipeline-node">FT-CAT Probability</span>
-            +
-            <span class="pipeline-node">DAE Anomaly Score</span>
-            +
+            <span class="pipeline-arrow">→</span>
+            <span class="pipeline-node pipeline-ftcat">FT-CAT Probability</span>
+            <span class="pipeline-join">+</span>
+            <span class="pipeline-node pipeline-dae">DAE Anomaly Score</span>
+            <span class="pipeline-join">+</span>
             <span class="pipeline-node">History Context</span>
-            →
-            <span class="pipeline-node pipeline-accent">
+            <span class="pipeline-arrow">→</span>
+            <span class="pipeline-node pipeline-gate">
                 Learned Gate
             </span>
-            →
+            <span class="pipeline-arrow">→</span>
             <span class="pipeline-node">Fraud Probability</span>
-            →
-            <span class="pipeline-node pipeline-accent">
+            <span class="pipeline-arrow">→</span>
+            <span class="pipeline-node pipeline-conformal">
                 Conformal Prediction
             </span>
-            →
-            <span class="pipeline-node">Approve</span>
-            /
-            <span class="pipeline-node">Review</span>
-            /
-            <span class="pipeline-node">Block</span>
+            <span class="pipeline-arrow">→</span>
+            <span class="pipeline-node pipeline-approve">Approve</span>
+            <span class="pipeline-join">/</span>
+            <span class="pipeline-node pipeline-review">Review</span>
+            <span class="pipeline-join">/</span>
+            <span class="pipeline-node pipeline-block">Block</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     st.markdown(
-        '<div class="section-title">Experiment Intelligence</div>',
+        '<div class="section-title">Model Status</div>',
         unsafe_allow_html=True,
     )
 
-    metric_columns = st.columns(3)
+    st.markdown('<div class="status-panel">', unsafe_allow_html=True)
 
-    with metric_columns[0]:
-        if coverage is None:
-            value = "PENDING"
-            note = "Waiting for final held-out conformal evaluation"
-            accent = "yellow"
-        else:
-            value = f"{coverage * 100:.2f}%"
-            note = "Empirical held-out conformal coverage"
-            accent = "green"
+    render_status_row("FT-CAT Transformer", FT_CHECKPOINT.is_file())
+    render_status_row("Denoising Autoencoder", DAE_CHECKPOINT.is_file())
+    render_status_row("Learned Hybrid Gate", GATE_CHECKPOINT.is_file())
+    render_status_row("Conformal Calibration", CONFORMAL_RESULTS.is_file())
 
-        render_metric_card(
-            "Conformal Coverage",
-            value,
-            note,
-            accent=accent,
-        )
-
-    with metric_columns[1]:
-        if review_rate is None:
-            value = "PENDING"
-            note = "Analyst workload will populate from real evaluation"
-            accent = "yellow"
-        else:
-            value = f"{review_rate * 100:.2f}%"
-            note = "Transactions routed to human review"
-            accent = "green"
-
-        render_metric_card(
-            "Analyst Review Workload",
-            value,
-            note,
-            accent=accent,
-        )
-
-    with metric_columns[2]:
-        if singleton_rate is None:
-            value = "PENDING"
-            note = "Singleton prediction-set rate not generated yet"
-            accent = "yellow"
-        else:
-            value = f"{singleton_rate * 100:.2f}%"
-            note = "Confident singleton conformal decisions"
-            accent = "green"
-
-        render_metric_card(
-            "Singleton Decisions",
-            value,
-            note,
-            accent=accent,
-        )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown(
-        '<div class="section-title">System Readiness</div>',
+        '<div class="section-title">Artifacts</div>',
         unsafe_allow_html=True,
     )
 
-    left, right = st.columns(2)
+    st.markdown('<div class="status-panel">', unsafe_allow_html=True)
 
-    with left:
-        st.markdown(
-            '<div class="status-panel">',
-            unsafe_allow_html=True,
-        )
+    render_status_row("DAE latent-space visualization", TSNE_FIGURE.is_file())
+    render_status_row("SHAP explainability artifacts", SHAP_GLOBAL_FIGURE.is_file())
+    render_status_row("Conformal evaluation artifacts", CONFORMAL_RESULTS.is_file())
 
-        render_status_row(
-            "DAE checkpoint",
-            DAE_CHECKPOINT.is_file(),
-        )
-
-        render_status_row(
-            "FT-CAT checkpoint",
-            FT_CHECKPOINT.is_file(),
-        )
-
-        render_status_row(
-            "Learned gate checkpoint",
-            GATE_CHECKPOINT.is_file(),
-        )
-
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True,
-        )
-
-    with right:
-        st.markdown(
-            '<div class="status-panel">',
-            unsafe_allow_html=True,
-        )
-
-        render_status_row(
-            "DAE latent-space visualization",
-            TSNE_FIGURE.is_file(),
-        )
-
-        render_status_row(
-            "SHAP explainability artifacts",
-            SHAP_GLOBAL_FIGURE.is_file(),
-        )
-
-        render_status_row(
-            "Conformal evaluation artifacts",
-            CONFORMAL_RESULTS.is_file(),
-        )
-
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True,
-        )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1039,9 +1290,47 @@ def command_page() -> None:
 # ---------------------------------------------------------------------------
 def prediction_page() -> None:
     """Run live fraud scoring for a real held-out transaction."""
-    render_header(
-        "Live Prediction",
-        "Score a real held-out transaction through the production API.",
+    st.markdown(
+        """
+        <div class="prediction-hero">
+            <div class="prediction-kicker">Prediction</div>
+            <div class="prediction-title">
+                Fraud <span class="prediction-title-accent">Triage</span>
+            </div>
+            <div class="prediction-tagline">
+                From data to decisions.
+            </div>
+            <div class="prediction-description">
+                Analyze a real held-out transaction using FT-CAT, the
+                denoising autoencoder, learned hybrid gating, and
+                uncertainty-aware conformal prediction.
+            </div>
+            <div class="prediction-capabilities">
+                <div class="prediction-capability">
+                    <div class="capability-icon">&check;</div>
+                    <div class="capability-copy">
+                        <strong>Detect</strong>
+                        <span>Identify fraud patterns</span>
+                    </div>
+                </div>
+                <div class="prediction-capability">
+                    <div class="capability-icon">&#8599;</div>
+                    <div class="capability-copy">
+                        <strong>Explain</strong>
+                        <span>Understand risk signals</span>
+                    </div>
+                </div>
+                <div class="prediction-capability">
+                    <div class="capability-icon">&#9678;</div>
+                    <div class="capability-copy">
+                        <strong>Decide</strong>
+                        <span>Route with confidence</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     try:
@@ -1055,7 +1344,17 @@ def prediction_page() -> None:
         return
 
     st.markdown(
-        '<div class="section-title">Transaction Selection</div>',
+        """
+        <div class="prediction-selection-shell">
+            <div class="prediction-selection-title">
+                Transaction Selection
+            </div>
+            <div class="prediction-selection-caption">
+                Choose a real chronological held-out example to run
+                through the production fraud pipeline.
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -1105,6 +1404,7 @@ def prediction_page() -> None:
             "Transaction ID",
             str(transaction_id),
             "Real chronological held-out transaction",
+            accent="neutral",
         )
 
     with info_columns[1]:
@@ -1112,7 +1412,7 @@ def prediction_page() -> None:
             "Ground Truth",
             "FRAUD" if ground_truth == 1 else "LEGITIMATE",
             "Held-out label used only after prediction",
-            accent="yellow" if ground_truth == 1 else "green",
+            accent="red" if ground_truth == 1 else "green",
         )
 
     with info_columns[2]:
@@ -1120,15 +1420,60 @@ def prediction_page() -> None:
             "Processed Amount",
             f"{processed_amount:.4f}",
             "Scaled model input, not raw currency value",
+            accent="neutral",
         )
 
     st.markdown("")
 
-    if not st.button(
-        "Run Fraud Analysis",
+    run_analysis = st.button(
+        "▶  Run Fraud Analysis  →",
         type="primary",
         use_container_width=True,
-    ):
+    )
+
+    st.markdown(
+        """
+        <div class="workflow-card">
+            <div class="workflow-title">What happens next?</div>
+            <div class="workflow-steps">
+                <div class="workflow-step">
+                    <div class="workflow-number">1</div>
+                    <div class="workflow-copy">
+                        <strong>Analyze</strong>
+                        <span>FT-CAT + DAE + Gate</span>
+                    </div>
+                </div>
+                <div class="workflow-arrow">&rarr;</div>
+                <div class="workflow-step">
+                    <div class="workflow-number">2</div>
+                    <div class="workflow-copy">
+                        <strong>Calibrate</strong>
+                        <span>Conformal prediction</span>
+                    </div>
+                </div>
+                <div class="workflow-arrow">&rarr;</div>
+                <div class="workflow-step">
+                    <div class="workflow-number">3</div>
+                    <div class="workflow-copy">
+                        <strong>Decide</strong>
+                        <span>Approve / Review / Block</span>
+                    </div>
+                </div>
+                <div class="workflow-arrow">&rarr;</div>
+                <div class="workflow-step">
+                    <div class="workflow-number">4</div>
+                    <div class="workflow-copy">
+                        <strong>Explain</strong>
+                        <span>Model signals &amp; insights</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if not run_analysis:
         st.info(
             "Select a held-out transaction and run the full "
             "DAE + FT-CAT + gate + conformal pipeline."
@@ -1168,6 +1513,7 @@ def prediction_page() -> None:
                 else "N/A"
             ),
             "Supervised fraud probability",
+            accent="blue",
         )
 
     with metric_columns[1]:
@@ -1175,6 +1521,7 @@ def prediction_page() -> None:
             "DAE Anomaly Score",
             (f"{float(anomaly_score):.4f}" if isinstance(anomaly_score, (int, float)) else "N/A"),
             "Reconstruction-based anomaly signal",
+            accent="cyan",
         )
 
     with metric_columns[2]:
@@ -1186,6 +1533,7 @@ def prediction_page() -> None:
                 else "N/A"
             ),
             "Learned hybrid gate output",
+            accent="purple",
         )
 
     with metric_columns[3]:
@@ -1193,6 +1541,7 @@ def prediction_page() -> None:
             "Latency",
             (f"{float(latency_ms):.2f} ms" if isinstance(latency_ms, (int, float)) else "N/A"),
             "FastAPI inference latency",
+            accent="neutral",
         )
 
     decision_columns = st.columns(2)
@@ -1293,6 +1642,7 @@ def batch_analysis_page() -> None:
             "Transactions",
             f"{len(frame):,}",
             "Rows in uploaded result file",
+            accent="neutral",
         )
 
     with col2:
@@ -1300,6 +1650,7 @@ def batch_analysis_page() -> None:
             "Available Fields",
             f"{len(frame.columns):,}",
             "Columns available for inspection",
+            accent="neutral",
         )
 
     st.markdown(
@@ -1429,7 +1780,7 @@ def conformal_page() -> None:
                 if coverage is not None
                 else "Waiting for real conformal evaluation"
             ),
-            accent="yellow" if coverage is None else "green",
+            accent="amber" if coverage is None else "neutral",
         )
 
     with col2:
@@ -1437,7 +1788,7 @@ def conformal_page() -> None:
             "Review Workload",
             ("PENDING" if review_rate is None else f"{review_rate * 100:.2f}%"),
             "Fraction routed to human analyst review",
-            accent="yellow" if review_rate is None else "green",
+            accent="amber" if review_rate is None else "neutral",
         )
 
     with col3:
@@ -1445,7 +1796,7 @@ def conformal_page() -> None:
             "Average Set Size",
             ("PENDING" if avg_set_size is None else f"{avg_set_size:.3f}"),
             "Mean conformal prediction-set cardinality",
-            accent="yellow" if avg_set_size is None else "green",
+            accent="amber" if avg_set_size is None else "neutral",
         )
 
     render_artifact_image(
@@ -1608,9 +1959,9 @@ def settings_page() -> None:
     st.code(
         "\n".join(
             (
-                f"Checkpoints: {CHECKPOINT_DIR}",
-                f"Figures:     {FIGURES_DIR}",
-                f"Results:     {RESULTS_DIR}",
+                f"Models:  {CHECKPOINT_DIR.relative_to(PROJECT_ROOT)}",
+                f"Figures: {FIGURES_DIR.relative_to(PROJECT_ROOT)}",
+                f"Results: {RESULTS_DIR.relative_to(PROJECT_ROOT)}",
             )
         )
     )
@@ -1678,7 +2029,24 @@ def render_sidebar() -> str:
     with st.sidebar:
         st.markdown(
             """
-            <div class="sidebar-logo">◈</div>
+            <div class="sidebar-logo">
+                <svg
+                    width="20" height="20" viewBox="0 0 24 24"
+                    fill="none" xmlns="http://www.w3.org/2000/svg"
+                >
+                    <path
+                        d="M12 2L4 5v6c0 5.25 3.4 9.74 8 11 4.6-1.26 8-5.75 8-11V5l-8-3z"
+                        fill="var(--bg)"
+                    />
+                    <path
+                        d="M9 12.3l2 2 4-4.6"
+                        stroke="var(--text)"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+            </div>
             """,
             unsafe_allow_html=True,
         )
@@ -1686,33 +2054,29 @@ def render_sidebar() -> str:
         st.markdown("### Fraud Triage")
 
         st.markdown(
-            '<div class="tiny-green">' "FT-CAT • DAE • Gate • Conformal" "</div>",
+            '<div class="tiny-mono">' "FT-CAT • DAE • Gate • Conformal" "</div>",
             unsafe_allow_html=True,
         )
 
         st.markdown("")
 
-        display_options = [f"{item.icon}  {item.label}" for item in NAV_ITEMS]
-        page_by_display = {display: item.label for display, item in zip(display_options, NAV_ITEMS)}
-
-        selected_display = st.radio(
+        selected_page = st.radio(
             "Navigation",
-            display_options,
+            NAV_ITEMS,
             label_visibility="collapsed",
         )
 
         st.markdown(
             f"""
             <div class="sidebar-readiness">
-                CORE MODEL READINESS
-                <br>
-                <span class="tiny-green">{ready}/3 available</span>
+                <span class="small-dot-ready"></span>
+                <span class="tiny-mono">{ready}/3 models ready</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        return page_by_display[selected_display]
+        return selected_page
 
 
 # ---------------------------------------------------------------------------
