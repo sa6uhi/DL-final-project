@@ -27,7 +27,7 @@
 }
 \IEEEauthorblockA{
 AI Academy, National Artificial Intelligence Center, Azerbaijan\\
-Email: habil.huseynov25@aiacademy.edu.az
+Email: nadirr2609@gmail.com, sabuhi.nazarov11@gmail.com, habil.huseynov25@aiacademy.edu.az
 }
 }
 \maketitle
@@ -304,16 +304,16 @@ Table~\ref{tab:baselines} reports validation PR-AUC and ROC-AUC.
 \toprule
 Model & PR-AUC & ROC-AUC \\
 \midrule
-Logistic Regression (balanced) & 0.4354 & 0.8534 \\
-Random Forest (200 trees, depth 16) & 0.4542 & 0.8743 \\
-LightGBM (weighted) & 0.5089 & 0.8991 \\
+Logistic Regression (balanced) & 0.4471 & 0.8609 \\
+Random Forest (200 trees, depth 16) & 0.4698 & 0.8819 \\
+LightGBM (weighted) & 0.5207 & 0.9088 \\
 \bottomrule
 \end{tabular}
 \end{table}
 The random forest uses a maximum depth of 16 and a minimum leaf size of 10:
 without a depth limit, 200 fully grown trees on the full training data
 produced a 550\,MB checkpoint with multi-second inference stalls, while the
-constrained model compresses to 56\,MB and scores the full validation split
+constrained model compresses to 57\,MB and scores the full validation split
 in 0.3\,s on CPU. Final out-of-time test comparison against the deep models
 uses the same chronological held-out test set.
 \subsection{FT-CAT Performance}
