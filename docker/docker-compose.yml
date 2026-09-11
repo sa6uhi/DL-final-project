@@ -38,7 +38,7 @@ services:
       - ../data:/app/data
       - ../models:/app/models
       - ../logs:/app/logs
-    command: ["run_all.sh"]
+    command: ["./run_all.sh"]
 
   dashboard:
     profiles: ["dashboard"]

@@ -16,7 +16,6 @@ htmlcov/
 
 # data & artifacts
 data/
-models/
 logs/
 figures/
 experiments/

@@ -139,6 +139,8 @@ Inference benchmarks were run on the production checkpoints using warm-up iterat
 
 The learned gate adds very little computational overhead, while the full neural pipeline remains suitable for real-time transaction scoring on CPU.
 
+Latencies above are run means from the artifact; the paper (Table 4) reports medians from the same runs.
+
 Benchmark artifacts are stored in:
 
 ```text
@@ -152,10 +154,10 @@ results/benchmark/inference_benchmark.json
 
 The trained neural models are exported to both PyTorch EXIR (`.pt2`) and ONNX formats.
 
-Serialized artifacts include:
+Serialized artifacts include (under `models/artifacts/`, the `run_all.sh` output directory):
 
 ```text
-models/serialized/
+models/artifacts/
 ├── autoencoder.pt2
 ├── autoencoder.onnx
 ├── ft_transformer.pt2
@@ -206,6 +208,20 @@ curl -X POST "http://localhost:8000/predict" \
 }
 ```
 
+### Analyst dashboard
+
+The Streamlit triage dashboard visualizes predictions, conformal confidence badges, and SHAP explanations:
+
+```bash
+streamlit run src/dashboard/app.py --server.port 8501
+```
+
+Or via Docker Compose (API on `8000`, dashboard on `8501`):
+
+```bash
+docker compose -f docker/docker-compose.yml --profile dashboard up --build
+```
+
 ---
 
 ## Quickstart
@@ -214,7 +230,7 @@ curl -X POST "http://localhost:8000/predict" \
 
 ```bash
 python -m venv venv
-venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -232,7 +248,7 @@ python -m src.data.prepare_data
 python -m src.training.train_autoencoder --config config/config.yaml
 python -m src.serving.model_serializer \
   --input models/checkpoints \
-  --output models/serialized \
+  --output models/artifacts \
   --config config/config.yaml
 python -m experiments.inference_benchmark
 uvicorn src.serving.api:app --host 0.0.0.0 --port 8000
@@ -305,9 +321,7 @@ results/
 └── explainability/
 
 figures/
-├── inference_benchmark/
-├── conformal/
-├── hybrid_gating/
+├── autoencoder_latent/
 └── explainability/
 ```
 
