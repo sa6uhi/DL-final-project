@@ -248,7 +248,7 @@ automatically then starts the API (`:8000`) and dashboard (`:8501`). The
 inference image is about 2 GB on disk (~450 MB compressed download), mostly
 the PyTorch CPU runtime.
 
-### Local environment
+### Local environment (Linux/macOS, Python 3.13+, bash)
 
 ```bash
 python -m venv venv
@@ -256,18 +256,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Requires Linux or macOS with Python 3.13+ and bash. `run_all.sh` automatically
-uses `venv/bin/python` when the virtualenv exists at `./venv`, and installs
-are pinned in `requirements.txt`, but only Docker guarantees the exact BLAS /
-CPU instruction set the benchmark numbers were measured with.
+`run_all.sh` automatically uses `venv/bin/python` when the virtualenv exists
+at `./venv`, and installs are pinned in `requirements.txt`, but only Docker
+guarantees the exact BLAS / CPU instruction set the benchmark numbers were
+measured with.
 
-Run the full pipeline (create and activate the virtualenv first if you have
-not already done so):
+Run the full pipeline:
 
 ```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
 ./run_all.sh
 ```
 
@@ -340,7 +336,7 @@ python -m pytest \
 Current result:
 
 ```text
-148 passed
+787 passed, ~87% coverage (gate: 80%)
 ```
 
 Formatting and linting:
@@ -367,6 +363,8 @@ The GitHub Actions workflow performs:
 
 ```text
 results/
+├── baselines/
+│   └── baseline_metrics.json
 ├── benchmark/
 │   ├── inference_benchmark.csv
 │   └── inference_benchmark.json
@@ -376,7 +374,9 @@ results/
 
 figures/
 ├── autoencoder_latent/
-└── explainability/
+├── conformal/
+├── explainability/
+└── inference_benchmark/
 ```
 
 The repository is designed to provide reproducible training, evaluation, uncertainty triage, explainability, model serialization, and production-style serving for a modern fraud detection workflow.
