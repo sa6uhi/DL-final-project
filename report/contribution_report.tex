@@ -1,55 +1,112 @@
-\documentclass[11pt,a4paper]{article}
+\documentclass[10pt,a4paper]{article}
 
-\usepackage[margin=1.5cm]{geometry}
+% =========================================================
+% PACKAGES
+% =========================================================
+
+\usepackage[
+    top=1.35cm,
+    bottom=1.35cm,
+    left=1.35cm,
+    right=1.35cm
+]{geometry}
+
 \usepackage{array}
-\usepackage{tabularx}
 \usepackage{booktabs}
 \usepackage{ragged2e}
 \usepackage{fontspec}
 \usepackage{microtype}
 \usepackage[table]{xcolor}
+\usepackage{ltablex}
+\usepackage{needspace}
+
+% =========================================================
+% FONTS
+% =========================================================
 
 \setmainfont{Liberation Serif}
 \newfontfamily\azfont{DejaVu Serif}
 
+% =========================================================
+% COLORS
+% =========================================================
+
 \definecolor{darkgreen}{RGB}{24,92,69}
 \definecolor{lightgreen}{RGB}{232,242,237}
+\definecolor{signaturegray}{RGB}{105,105,105}
+
+% =========================================================
+% GENERAL FORMATTING
+% =========================================================
 
 \setlength{\parindent}{0pt}
-\setlength{\parskip}{5pt}
-\renewcommand{\arraystretch}{1.25}
+\setlength{\parskip}{4pt}
+\setlength{\tabcolsep}{4pt}
+
+\renewcommand{\arraystretch}{1.15}
+
+\keepXColumns
 
 \newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
 
+% =========================================================
+% DOCUMENT
+% =========================================================
+
 \begin{document}
 
-\begin{center}
-    {\LARGE\bfseries\color{darkgreen} Contribution Report}\\[4pt]
-    {\large Deep Learning Final Project}\\[3pt]
-    {\bfseries Real-Time Financial Fraud Detection with Learned Hybrid Gating\\
-    and Uncertainty-Aware Triage}\\[8pt]
+% =========================================================
+% TITLE
+% =========================================================
 
-    AI Academy, National Artificial Intelligence Center, Azerbaijan\\[3pt]
-    11 September 2026
+\begin{center}
+
+{\LARGE\bfseries\color{darkgreen}
+Contribution Report}\\[4pt]
+
+{\large
+Deep Learning Final Project}\\[3pt]
+
+{\bfseries
+Real-Time Financial Fraud Detection with Learned Hybrid Gating\\
+and Uncertainty-Aware Triage}\\[7pt]
+
+AI Academy, National Artificial Intelligence Center, Azerbaijan\\[2pt]
+
+11 September 2026
+
 \end{center}
 
-\vspace{4pt}
+\vspace{5pt}
 
-\noindent
+% =========================================================
+% INTRODUCTION
+% =========================================================
+
 This report summarizes the agreed division of work and principal contributions
 of the four project members. The project was developed collaboratively, with
 each member owning a major technical component while contributing to integration,
 testing, experimentation, documentation, and final project delivery.
 
-\vspace{8pt}
+\vspace{6pt}
+
+% =========================================================
+% CONTRIBUTION TABLE
+% =========================================================
 
 \small
 
 \begin{tabularx}{\textwidth}{
-    >{\RaggedRight\arraybackslash}p{2.25cm}
-    Y Y Y Y Y
+    >{\RaggedRight\arraybackslash}p{2.05cm}
+    Y
+    Y
+    Y
+    Y
+    Y
 }
+
 \toprule
+
 \rowcolor{lightgreen}
 \textbf{Member Name} &
 \textbf{Code} &
@@ -57,122 +114,395 @@ testing, experimentation, documentation, and final project delivery.
 \textbf{Experiments} &
 \textbf{Slides} &
 \textbf{Other} \\
+
 \midrule
+\endfirsthead
+
+% Repeated table header on following pages
+\toprule
+
+\rowcolor{lightgreen}
+\textbf{Member Name} &
+\textbf{Code} &
+\textbf{Report Sections} &
+\textbf{Experiments} &
+\textbf{Slides} &
+\textbf{Other} \\
+
+\midrule
+\endhead
+
+% =========================================================
+% NADIR
+% =========================================================
 
 {\azfont Əskərov Nadir} &
+
 Data pipeline, temporal splitting, preprocessing, historical sequence extraction,
 dataset/DataLoader components, classical baselines, evaluation metrics and cost
 analysis. &
+
 Dataset protocol, chronological splitting, sequence protocol, baseline methodology
 and results. &
+
 Baseline benchmarking and historical sequence-window ablation. &
+
 Dataset characteristics, sequence representation, and baseline results. &
+
 Prepared the leakage-aware data foundation and processed inputs used by downstream
 models. \\
 
 \midrule
 
+% =========================================================
+% AKŞIN
+% =========================================================
+
 {\azfont Fətəliyev Akşin} &
+
 FT-CAT Transformer, feature tokenization, self-attention and temporal
 cross-attention, focal-loss components, and supervised transformer training. &
+
 FT-CAT architecture, attention methodology, focal-loss design, and supervised
 deep-learning methodology/results. &
+
 FT-CAT architecture ablation and focal-loss sensitivity analysis assigned as the
 supervised-model experiments. &
+
 Primary ownership and coordination of the final 15--20 minute presentation deck,
 including architecture and model-result slides. &
+
 Produced the supervised deep-learning branch and trained FT-CAT model checkpoint. \\
 
 \midrule
 
+% =========================================================
+% SƏBUHI
+% =========================================================
+
 {\azfont Nəzərov Səbuhi} &
+
 Denoising autoencoder, autoencoder training, centralized utilities, serving
 schemas/API, model serialization, Docker/CI infrastructure, and reproduction
 tooling. &
+
 DAE methodology, serving architecture, deployment notes, and latency evaluation. &
+
 Autoencoder anomaly evaluation and latency/throughput evaluation. &
+
 DAE, serving, deployment, and system-integration material. &
+
 Developed the anomaly-detection and serving/deployment foundation, including
 FastAPI, serialization, containerization, CI/CD, and reproduction tooling. \\
 
 \midrule
 
+% =========================================================
+% HABIL
+% =========================================================
+
 {\azfont Hüseynov Habil} &
+
 Learned hybrid gating, conformal prediction and triage, SHAP explainability,
 Streamlit analyst dashboard, integration and robustness testing, and supporting
 evaluation/serialization work. &
+
 Introduction, related work, learned gating, conformal prediction, XAI analysis,
 results interpretation, discussion/limitations, conclusion, and final IEEE paper
 assembly. &
+
 Learned-vs-fixed gating evaluation, multi-seed gate robustness, conformal
 coverage/workload evaluation, SHAP consistency analysis, DAE latent-space t-SNE,
 and CPU inference benchmarking/integration. &
+
 Conformal triage, learned gating, XAI, dashboard, and final result/deployment
 material. &
+
 Compiled the final IEEE report; implemented and validated the analyst dashboard;
 performed final Member-D integration, regression testing, artifact validation,
 and contribution-report assembly. \\
 
 \bottomrule
+
 \end{tabularx}
 
 \normalsize
 
-\vspace{12pt}
+\vspace{8pt}
+
+% =========================================================
+% INDIVIDUAL CONTRIBUTION SUMMARY
+% =========================================================
 
 \section*{\color{darkgreen}Individual Contribution Summary}
 
 \textbf{{\azfont Əskərov Nadir} --- Data \& Sequence Lead.}
+
 Responsible for the data and sequence-processing foundation of the system,
 including leakage-aware chronological splitting, preprocessing, historical
 transaction sequence construction, classical machine-learning baselines, and
 core evaluation definitions.
 
+\vspace{2pt}
+
 \textbf{{\azfont Fətəliyev Akşin} --- Supervised Transformer Lead.}
+
 Responsible for the supervised FT-CAT branch, including feature tokenization,
 self-attention, temporal cross-attention, focal-loss formulation, supervised
 training, and coordination of the final presentation deck.
 
+\vspace{2pt}
+
 \textbf{{\azfont Nəzərov Səbuhi} --- Self-Supervised Anomaly \& Serving Lead.}
+
 Responsible for the denoising autoencoder and the principal engineering and
 deployment infrastructure, including centralized utilities, FastAPI serving,
 model serialization, Docker/CI integration, and reproducibility tooling.
 
+\vspace{2pt}
+
 \textbf{{\azfont Hüseynov Habil} --- Learned Gating, Conformal \& UI Lead.}
+
 Responsible for learned hybrid fusion, uncertainty-aware conformal triage,
 DAE-focused SHAP explainability, the Streamlit analyst interface, latent-space
 visualization, gating and conformal experiments, robustness evaluation, final
 IEEE report compilation, and contribution-report assembly.
 
-\vspace{10pt}
+\vspace{7pt}
+
+% =========================================================
+% TEAM AGREEMENT
+% =========================================================
+
+\needspace{10cm}
 
 \section*{\color{darkgreen}Team Agreement}
 
-The members confirm that the contribution summary above reflects the agreed
+The members acknowledge that the contribution summary above reflects the agreed
 division of responsibilities and project work. The system was integrated and
 evaluated collaboratively, and all members contributed to the completion of the
-final project.
+final project. The names below identify the project members associated with this
+contribution report.
 
-\vspace{16pt}
+\vspace{12pt}
 
-\begin{tabularx}{\textwidth}{X X}
-\textbf{{\azfont Əskərov Nadir}} &
-\textbf{{\azfont Fətəliyev Akşin}} \\[16pt]
-Signature: \hrulefill &
-Signature: \hrulefill \\[20pt]
+% =========================================================
+% MEMBER ACKNOWLEDGEMENTS
+% =========================================================
 
-\textbf{{\azfont Hüseynov Habil}} &
-\textbf{{\azfont Nəzərov Səbuhi}} \\[16pt]
-Signature: \hrulefill &
-Signature: \hrulefill \\
+\begin{center}
+
+{\small\bfseries\color{signaturegray}
+MEMBER ACKNOWLEDGEMENTS}
+
+\vspace{3pt}
+
+{\color{lightgreen}\rule{0.32\textwidth}{1.2pt}}
+
+\end{center}
+
+\vspace{9pt}
+
+\renewcommand{\arraystretch}{1}
+
+\begin{tabularx}{\textwidth}{
+    >{\centering\arraybackslash}X
+    >{\centering\arraybackslash}X
+}
+
+% =========================================================
+% ROW 1 — NADIR / AKŞIN
+% =========================================================
+
+\begin{minipage}[t]{0.43\textwidth}
+\centering
+
+% Initial mark
+{\color{darkgreen}
+\setlength{\fboxsep}{8pt}
+\setlength{\fboxrule}{0.8pt}
+\fbox{
+    \begin{minipage}[c][0.8cm][c]{0.8cm}
+    \centering
+    {\Large\bfseries\azfont ƏN}
+    \end{minipage}
+}
+}
+
+\vspace{8pt}
+
+{\large\bfseries\azfont Əskərov Nadir}
+
+\vspace{2pt}
+
+{\footnotesize\bfseries\color{darkgreen}
+DATA \& SEQUENCE LEAD}
+
+\vspace{9pt}
+
+{\color{darkgreen}
+\rule{0.70\linewidth}{0.7pt}}
+
+\vspace{2pt}
+
+{\scriptsize\color{signaturegray}
+MEMBER ACKNOWLEDGEMENT}
+
+\end{minipage}
+
+&
+
+\begin{minipage}[t]{0.43\textwidth}
+\centering
+
+% Initial mark
+{\color{darkgreen}
+\setlength{\fboxsep}{8pt}
+\setlength{\fboxrule}{0.8pt}
+\fbox{
+    \begin{minipage}[c][0.8cm][c]{0.8cm}
+    \centering
+    {\Large\bfseries\azfont FA}
+    \end{minipage}
+}
+}
+
+\vspace{8pt}
+
+{\large\bfseries\azfont Fətəliyev Akşin}
+
+\vspace{2pt}
+
+{\footnotesize\bfseries\color{darkgreen}
+SUPERVISED TRANSFORMER LEAD}
+
+\vspace{9pt}
+
+{\color{darkgreen}
+\rule{0.70\linewidth}{0.7pt}}
+
+\vspace{2pt}
+
+{\scriptsize\color{signaturegray}
+MEMBER ACKNOWLEDGEMENT}
+
+\end{minipage}
+
+\\[25pt]
+
+% =========================================================
+% ROW 2 — HABIL / SƏBUHI
+% =========================================================
+
+\begin{minipage}[t]{0.43\textwidth}
+\centering
+
+% Initial mark
+{\color{darkgreen}
+\setlength{\fboxsep}{8pt}
+\setlength{\fboxrule}{0.8pt}
+\fbox{
+    \begin{minipage}[c][0.8cm][c]{0.8cm}
+    \centering
+    {\Large\bfseries\azfont HH}
+    \end{minipage}
+}
+}
+
+\vspace{8pt}
+
+{\large\bfseries\azfont Hüseynov Habil}
+
+\vspace{2pt}
+
+{\footnotesize\bfseries\color{darkgreen}
+LEARNED GATING, CONFORMAL \& UI LEAD}
+
+\vspace{9pt}
+
+{\color{darkgreen}
+\rule{0.70\linewidth}{0.7pt}}
+
+\vspace{2pt}
+
+{\scriptsize\color{signaturegray}
+MEMBER ACKNOWLEDGEMENT}
+
+\end{minipage}
+
+&
+
+\begin{minipage}[t]{0.43\textwidth}
+\centering
+
+% Initial mark
+{\color{darkgreen}
+\setlength{\fboxsep}{8pt}
+\setlength{\fboxrule}{0.8pt}
+\fbox{
+    \begin{minipage}[c][0.8cm][c]{0.8cm}
+    \centering
+    {\Large\bfseries\azfont NS}
+    \end{minipage}
+}
+}
+
+\vspace{8pt}
+
+{\large\bfseries\azfont Nəzərov Səbuhi}
+
+\vspace{2pt}
+
+{\footnotesize\bfseries\color{darkgreen}
+SELF-SUPERVISED ANOMALY \& SERVING LEAD}
+
+\vspace{9pt}
+
+{\color{darkgreen}
+\rule{0.70\linewidth}{0.7pt}}
+
+\vspace{2pt}
+
+{\scriptsize\color{signaturegray}
+MEMBER ACKNOWLEDGEMENT}
+
+\end{minipage}
+
 \end{tabularx}
+
+\vspace{10pt}
+
+% =========================================================
+% ACKNOWLEDGEMENT NOTE
+% =========================================================
+
+\begin{center}
+
+\begin{minipage}{0.82\textwidth}
+
+\centering
+\footnotesize
+\color{signaturegray}
+
+The member names and initials above serve as typed acknowledgements
+associated with this contribution report.
+
+\end{minipage}
+
+\end{center}
 
 \vfill
 
+% =========================================================
+% FOOTER
+% =========================================================
+
 \begin{center}
+
 \small
 Deep Learning Final Project --- AI Academy\\
 National Artificial Intelligence Center, Azerbaijan
+
 \end{center}
 
 \end{document}
